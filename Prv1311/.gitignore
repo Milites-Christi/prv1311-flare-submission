@@ -1,0 +1,5 @@
+.env
+venv/
+logs/
+data/*.json
+token_id_cache.json

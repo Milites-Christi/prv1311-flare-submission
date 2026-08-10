@@ -1,0 +1,203 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "ftsoV2",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "feeCalculator",
+        "type": "address"
+      }
+    ],
+    "name": "AddressesRefreshed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes21",
+        "name": "feedId",
+        "type": "bytes21"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "oracleValue",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "oracleTimestamp",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "venueValue",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "divergenceBps",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "decisionHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "blockTimestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DivergenceRecorded",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "REGISTRY",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "feeCalculator",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ftsoV2",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes21",
+        "name": "",
+        "type": "bytes21"
+      }
+    ],
+    "name": "latestByFeed",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "oracleValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int8",
+        "name": "oracleDecimals",
+        "type": "int8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "oracleTimestamp",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint256",
+        "name": "venueValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "venueDecimals",
+        "type": "uint8"
+      },
+      {
+        "internalType": "int256",
+        "name": "divergenceBps",
+        "type": "int256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "decisionHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "recordedAt",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes21",
+        "name": "feedId",
+        "type": "bytes21"
+      },
+      {
+        "internalType": "uint256",
+        "name": "venueValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "venueDecimals",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "decisionHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "recordDivergence",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "refreshAddresses",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
