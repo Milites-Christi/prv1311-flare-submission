@@ -55,22 +55,44 @@ different, bounded, mechanically-capped thing.
 Run standalone (uses the same mechanical ceilings either way):
   cd C:\\Users\\Autry\\accum-flip\\Prv1311
   .\\venv\\Scripts\\Activate
-  python flare/anchor_writer.py
+  python -m flare.anchor_writer
+Module form, not `python flare/anchor_writer.py` by path -- see the import
+guard below for why that specific invocation silently fails.
 ================================================================================
 """
 
 import os
+import sys
 import time
 from datetime import datetime, timezone, time as dtime
 
-from web3 import Web3
+# Everything below this line can fail before any logger/health-row exists --
+# this exact class of failure took the service down silently on its first
+# real deployment: registered by file path instead of `-m flare.anchor_writer`,
+# which put flare/ (not Prv1311/) on sys.path, so `import rider_team` and
+# `from supabase_client import ...` failed at import time, before record_health
+# was even importable. Task Scheduler just showed LastTaskResult=1 with no
+# log line anywhere -- the health-row architecture never got a chance to run.
+# Exit 78 specifically (distinct from any error raised once the service is
+# actually up) so that failure mode is legible from the exit code alone, with
+# no log file to read.
+try:
+    from web3 import Web3
 
-import rider_team
-from supabase_client import get_client, record_health
-from flare.deploy_anchor import (
-    NETWORKS, _compile, _connect, _account, record_divergence,
-)
-from flare.decision_hash import fetch_latest_decision_row
+    import rider_team
+    from supabase_client import get_client, record_health
+    from flare.deploy_anchor import (
+        NETWORKS, _compile, _connect, _account, record_divergence,
+    )
+    from flare.decision_hash import fetch_latest_decision_row
+except Exception as e:
+    print(f"[anchor_writer] STARTUP FAILED before logging existed -- "
+          f"{type(e).__name__}: {e}", file=sys.stderr)
+    print("[anchor_writer] Likely cause: wrong invocation. Must run as "
+          "'python -m flare.anchor_writer' with Prv1311/ as the working "
+          "directory -- not 'python flare/anchor_writer.py' by path, which "
+          "puts flare/ on sys.path instead of the repo root.", file=sys.stderr)
+    sys.exit(78)
 
 ANCHOR_SYMBOLS = ["OP/USD", "FLR/USD", "ARB/USD", "BTC/USD", "ETH/USD"]
 CYCLE_SEC = 12 * 60 * 60  # every 12 hours
@@ -282,4 +304,14 @@ def run_service():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        # This entry point takes no arguments and falls straight into a live
+        # mainnet loop with no confirmation prompt (see SAFETY MODEL above).
+        # An unrecognized flag -- including a typo'd --help -- must refuse to
+        # start, not silently run the service. Caught live: an unhandled
+        # `--help` here ran a real anchoring cycle before it could be killed.
+        print(f"[anchor_writer] REFUSED -- unrecognized arguments {sys.argv[1:]}. "
+              "This entry point takes no arguments and starts the live mainnet "
+              "service unconditionally; run with none.", file=sys.stderr)
+        sys.exit(64)
     run_service()

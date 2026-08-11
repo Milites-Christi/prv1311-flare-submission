@@ -21,6 +21,17 @@ it is exactly what registering the task means. Confirm the wallet balance
 and DIVERGENCE_ANCHOR_ADDRESS_MAINNET in .env are what you expect before
 running this.
 
+Runs as `python -m flare.anchor_writer`, NOT `python flare\anchor_writer.py`
+by path -- module invocation is required so Python puts the working
+directory (not flare\'s own directory) on sys.path, which is what lets the
+script `import rider_team` and `from supabase_client import ...` resolve.
+WorkingDirectory is therefore load-bearing here, not cosmetic -- same
+pattern already used by install_divergence_recorder_task.ps1 and
+install_rider_flare_task.ps1. The first version of this script ran the
+script by path; the task registered fine but exited immediately every time
+(LastTaskResult 1, no log, no process) because every internal import failed
+before the logger existed. Fixed here; see docs/CHANGELOG.md.
+
 Prerequisite: the anchor_log Supabase table must already exist (it does as
 of this script being written -- verified with a live insert/delete test,
 schema cache reloaded).
@@ -57,7 +68,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
-$Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "`"$ScriptPath`"" -WorkingDirectory $RepoDir
+$Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m flare.anchor_writer" -WorkingDirectory $RepoDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $Settings = New-ScheduledTaskSettingsSet `
@@ -97,7 +108,7 @@ Get-ScheduledTask -TaskName $TaskName | Get-ScheduledTaskInfo |
 Write-Host ""
 Write-Host "--- Confirm the process is actually running ---"
 Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
-    Where-Object { $_.CommandLine -like "*anchor_writer.py*" } |
+    Where-Object { $_.CommandLine -like "*flare.anchor_writer*" } |
     Select-Object ProcessId, CommandLine | Format-List
 
 Write-Host ""
