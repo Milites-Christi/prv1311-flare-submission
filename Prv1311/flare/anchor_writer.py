@@ -95,11 +95,16 @@ except Exception as e:
     sys.exit(78)
 
 ANCHOR_SYMBOLS = ["OP/USD", "FLR/USD", "ARB/USD", "BTC/USD", "ETH/USD"]
-CYCLE_SEC = 12 * 60 * 60  # every 12 hours
+CYCLE_SEC = 8 * 60 * 60  # every 8 hours (raised from 12h -- more on-chain
+                          # samples before Aug 21 judging; see MAX_FLR_PER_DAY)
 
 MAX_CALLS_PER_RUN = 5       # one per symbol in ANCHOR_SYMBOLS, hard stop
-MAX_FLR_PER_DAY = 1.5       # refuse further sends once today's spend hits this
-MIN_WALLET_BALANCE = 5.0    # refuse to start a cycle, or send, below this
+MAX_FLR_PER_DAY = 1.8       # 3 cycles/day x 5 calls x ~0.0926 FLR ~= 1.39;
+                             # 1.8 gives headroom for gas spikes without
+                             # effectively disabling the cap
+MIN_WALLET_BALANCE = 2.0    # hard floor -- refuse to start a cycle, or send,
+                             # below this (was 5.0; deliberately spending
+                             # this wallet down toward empty before judging)
 
 ANCHOR_LOG_TABLE = "anchor_log"
 

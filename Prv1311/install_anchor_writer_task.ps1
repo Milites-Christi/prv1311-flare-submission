@@ -19,7 +19,7 @@ anchoring cycle (up to 5 mainnet transactions, ~0.09 FLR each at today's gas
 price) within seconds of you running it. That is not a bug in this script;
 it is exactly what registering the task means. Confirm the wallet balance
 and DIVERGENCE_ANCHOR_ADDRESS_MAINNET in .env are what you expect before
-running this.
+running this. Cadence is 8h (see flare/anchor_writer.py CYCLE_SEC).
 
 Runs as `python -m flare.anchor_writer`, NOT `python flare\anchor_writer.py`
 by path -- module invocation is required so Python puts the working
@@ -80,7 +80,7 @@ $Settings = New-ScheduledTaskSettingsSet `
 
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger `
     -Principal $Principal -Settings $Settings `
-    -Description "PRV1311 Flare mainnet DivergenceAnchor writer -- REAL FLR spend, mechanically capped (see flare/anchor_writer.py)." | Out-Null
+    -Description "PRV1311 Flare mainnet DivergenceAnchor writer -- anchors every 8h, REAL FLR spend, mechanically capped (see flare/anchor_writer.py)." | Out-Null
 
 Write-Host "Task '$TaskName' registered."
 
