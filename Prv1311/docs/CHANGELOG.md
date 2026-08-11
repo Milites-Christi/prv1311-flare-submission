@@ -12,6 +12,27 @@ down precisely, that's noted inline rather than guessed.*
 
 ---
 
+## Evidence of new work
+
+A commit log can be backdated. Rows written continuously by a running process can't.
+Everything below is a live query result — machine-written operational records, not
+curated for this document — showing this system has been running and producing data
+since early in the build window, independent of any commit history.
+
+| Source | First record | Most recent | Count | Notes |
+| --- | --- | --- | --- | --- |
+| `rider_health` | 2026-08-07 04:21:29 UTC | still writing | 1,713 | 8 components reporting; see breakdown below |
+| `rider_decisions` | 2026-08-07 07:57:26 UTC | 2026-08-11 01:22:04 UTC | 31,175 | rider 22,904 · scav 3,325 · rider_flare 4,160 · solo_rider 786 |
+| `rider_cycles` | 2026-08-07 07:57:25 UTC | 2026-08-11 01:22:04 UTC | 1,795 | rider 314 · scav 436 · rider_flare 259 · solo_rider 786 |
+| `oracle_divergence` | 2026-08-10 02:20:45 UTC | 2026-08-11 01:22:03 UTC | 12,192 | Flare oracle vs. live exchange price, one row per symbol per ~60s cycle |
+| `footprint_nodes` | 2026-08-05 13:50:00 UTC (bucket end) | 2026-08-11 01:00:00 UTC (bucket end) | 2,283 | order-flow data, oldest-running collector in the system |
+| `data/rider_ledger.json` trade history | 2026-08-01 14:42:34 | 2026-08-07 09:05:34 | 22 trades | local paper-trading ledger, not a database table |
+| `data/scav_ledger.json` trade history | 2026-08-04 02:52:27 | 2026-08-09 21:23:21 | 11 trades | local paper-trading ledger, not a database table |
+
+**`rider_health` first report per component** (8 total): `footprint_worker` 08-07 04:21:29 · `rider_engine` 08-07 08:29:13 · `universe_fetch` 08-07 21:37:23 (first row is a `DEGRADED` report — this component doesn't emit a startup row at all, only reports when it falls back) · `run_all` 08-07 16:53:01 · `divergence_recorder` 08-07 23:19:43 · `rider_flare_engine` 08-07 23:19:51 · `solo_rider_service` 08-10 01:50:19 · `solo_rider_engine_unknown` 08-10 01:50:25 (first row is `CYCLE_PAPER`, not a startup report — this component only reports per-cycle).
+
+---
+
 ## 2026-08-10
 
 ### Fixed
