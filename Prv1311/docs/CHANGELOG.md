@@ -33,6 +33,32 @@ since early in the build window, independent of any commit history.
 
 ---
 
+## 2026-08-11
+
+### Fixed
+- Anchor writer service registered successfully but exited immediately on every run.
+  Root cause: the scheduled task invoked the script by file path, which puts the
+  script's own subdirectory on the import path instead of the project root, so every
+  internal import failed before logging started. Now invoked as a module with the
+  working directory pinned to the project root.
+- The failure was invisible to our health monitoring because the process died before
+  the logger initialized. Added a startup guard that reports the reason and exits with
+  a distinct code, so the same class of failure is now visible from the task's exit
+  code alone.
+- A verification step during this fix accidentally ran one extra live anchoring cycle
+  outside the planned schedule (an unrecognized command-line flag fell through to the
+  live service instead of being rejected, the same invocation gap as the previous bug).
+  Caught within the same run and stopped; the cycle itself completed cleanly — 5
+  transactions, all decisionHash-verified against the chain, no ledger drift. Closed
+  by rejecting any unrecognized argument outright rather than silently starting the
+  service, so a mistyped flag can no longer trigger a live run.
+
+### Changed
+- Anchor cadence raised from 12h to 8h for more on-chain samples before judging; daily
+  spend cap and minimum wallet balance adjusted to match.
+
+---
+
 ## 2026-08-10
 
 ### Fixed
