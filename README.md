@@ -121,3 +121,20 @@ Task Scheduler services (`PRV1311-DivergenceRecorder`,
 shape as the existing `PRV1311-RiderTeam` / `PRV1311-FootprintWorker`
 services. Install scripts: `install_divergence_recorder_task.ps1`,
 `install_rider_flare_task.ps1` (repo root of `Prv1311/`).
+
+## Repository layout
+
+This repository contains two related codebases.
+
+`/` (root) — the original PRV1311 system. The parent build this
+project grew out of, retained here for lineage and continuing
+development.
+
+`/Prv1311/` — the codebase for this hackathon submission, including
+`Prv1311/flare/`, which holds all Flare-specific work: FTSO
+integration, the DivergenceAnchor contract, the on-chain divergence
+recorder, and decision-hash canonicalization.
+
+Where a filename appears in both locations the two versions have
+diverged; `/Prv1311/` is the code that runs the live system and the
+code this submission is about.
