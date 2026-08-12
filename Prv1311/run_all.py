@@ -26,6 +26,7 @@ import traceback
 from logging.handlers import RotatingFileHandler
 
 from supabase_client import record_health
+from sync_supabase import push_scavengers, push_dogs, push_core, push_markov
 import scavengers
 import dogs
 import markov
@@ -36,7 +37,18 @@ import flip_cheap_window
 import orderbook_imbalance
 
 
-def worker(name, setup, cycle, period_sec):
+def worker(name, setup, cycle, period_sec, push_fn=None):
+    # REAL BUG, FOUND LIVE (2026-08-12): SCAV/DOGS/CORE/MARKOV's Supabase
+    # state pushes (push_scavengers/push_dogs/push_core/push_markov) only
+    # ever lived inside each module's own run_engine() -- the standalone-
+    # service wrapper this file never calls (it drives run_cycle() directly,
+    # here). dog_state/scav_state/core_state/markov_state sat frozen since
+    # 2026-08-04 as a result -- not a crash, not a swallowed exception, just
+    # a push call this loop never reached. push_fn, called right after a
+    # successful cycle, closes that gap without needing each module's own
+    # run_engine() involved. None (the default) preserves exact prior
+    # behavior for EWMA/REGIME/CHEAP/OBI, which already push from inside
+    # their own run_cycle() and don't need this.
     try:
         state = setup() if setup else None
     except Exception:
@@ -46,6 +58,8 @@ def worker(name, setup, cycle, period_sec):
         try:
             if state is not None:
                 cycle(state)
+                if push_fn is not None:
+                    push_fn(state)
             else:
                 cycle()
         except Exception:
@@ -53,8 +67,11 @@ def worker(name, setup, cycle, period_sec):
         time.sleep(period_sec)
 
 
-# (name, setup_fn, cycle_fn, period_seconds)
+# (name, setup_fn, cycle_fn, period_seconds, push_fn)
 # Cadences spread out to respect Coinbase rate limits. Heavy scanners run rarely.
+# push_fn: None for engines that already push from inside their own run_cycle()
+# (EWMA/REGIME/CHEAP/OBI); the actual sync_supabase.push_* function for the
+# ones that don't (SCAV/DOGS/CORE/MARKOV) -- see worker()'s docstring comment.
 #
 # rider_team is DELIBERATELY NOT HERE -- it runs as the PRV1311-RiderTeam Windows
 # service (Task Scheduler, AtStartup, SYSTEM). Driving it here too would mean two
@@ -62,14 +79,14 @@ def worker(name, setup, cycle, period_sec):
 # If you ever need to run it manually for a one-off test, use rider_team.py directly,
 # not run_all.py -- and stop the service first.
 JOBS = [
-    ("SCAV",    scavengers.load_state,  lambda s: scavengers.run_cycle(s, scavengers.get_universe_markets(limit=50)), 10 * 60),
-    ("DOGS",    dogs.load_state,        lambda s: dogs.run_cycle(s, dogs.get_universe_markets(limit=50)),             30 * 60),
-    ("CORE",    core.load_state,        lambda s: core.run_cycle(s, core.get_universe_markets(limit=50)),             30 * 60),
-    ("MARKOV",  markov.load_state,      lambda s: markov.run_cycle(s),                                                30 * 60),
-    ("EWMA",    None,                   flip_ewma_buyzone.run_cycle,                                                  30 * 60),
-    ("REGIME",  None,                   regime.run_cycle,                                                             60 * 60),
-    ("CHEAP",   None,                   flip_cheap_window.run_cycle,                                                 120 * 60),
-    ("OBI",     None,                   orderbook_imbalance.run_cycle,                                                10 * 60),
+    ("SCAV",    scavengers.load_state,  lambda s: scavengers.run_cycle(s, scavengers.get_universe_markets(limit=50)), 10 * 60,  push_scavengers),
+    ("DOGS",    dogs.load_state,        lambda s: dogs.run_cycle(s, dogs.get_universe_markets(limit=50)),             30 * 60,  push_dogs),
+    ("CORE",    core.load_state,        lambda s: core.run_cycle(s, core.get_universe_markets(limit=50)),             30 * 60,  push_core),
+    ("MARKOV",  markov.load_state,      lambda s: markov.run_cycle(s),                                                30 * 60,  push_markov),
+    ("EWMA",    None,                   flip_ewma_buyzone.run_cycle,                                                  30 * 60,  None),
+    ("REGIME",  None,                   regime.run_cycle,                                                             60 * 60,  None),
+    ("CHEAP",   None,                   flip_cheap_window.run_cycle,                                                 120 * 60,  None),
+    ("OBI",     None,                   orderbook_imbalance.run_cycle,                                                10 * 60,  None),
 ]
 
 STAGGER_SEC = 60   # gap between each engine's first start
@@ -133,7 +150,8 @@ def main():
     env_loaded = bool(os.getenv("SUPABASE_URL")) and bool(os.getenv("SUPABASE_KEY"))
     record_health("run_all", "STARTUP", {
         "env_loaded": env_loaded,
-        "engines_driven": [name for name, _, _, _ in JOBS],
+        "engines_driven": [name for name, _, _, _, _ in JOBS],
+        "engines_pushing_ledger": [name for name, _, _, _, push_fn in JOBS if push_fn is not None],
         "service_managed": [label for label, _ in SERVICE_MANAGED],
         "stagger_sec": STAGGER_SEC,
     }, 0)
@@ -142,7 +160,7 @@ def main():
     print("      PRV1311 — RUN ALL (one terminal, staggered, rate-limit safe)")
     print("=" * 78)
     print("  DRIVEN HERE (threads in this process):")
-    for name, _, _, period in JOBS:
+    for name, _, _, period, _ in JOBS:
         print(f"    {name:<8} every {period // 60} min")
     print()
     print("  SERVICE-MANAGED (NOT run here -- Windows Task Scheduler):")
@@ -151,8 +169,8 @@ def main():
     print()
     print(f"  Staggered {STAGGER_SEC}s apart on startup. Ctrl+C stops everything.\n")
 
-    for name, setup, cycle, period in JOBS:
-        t = threading.Thread(target=worker, args=(name, setup, cycle, period),
+    for name, setup, cycle, period, push_fn in JOBS:
+        t = threading.Thread(target=worker, args=(name, setup, cycle, period, push_fn),
                              name=name, daemon=True)
         t.start()
         print(f"[{time.strftime('%H:%M:%S')}] started {name}")
