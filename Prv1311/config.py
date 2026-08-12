@@ -86,6 +86,12 @@ DIP_TRIGGER_PCT = 0.20
 MAX_CONCURRENT_RIDERS = 3          # hard exposure cap -- never ride more than 3 at once
 RIDER_PULLBACK_PCT = 10.0          # meaningful dip, not 4% noise (was 4%)
 RIDER_TARGET_PCT = 5.0             # flip target (+5%)
+# GATE-PARITY AUDIT (2026-08-12): cross-imported directly by scavengers.py
+# and dogs.py (neither has its own SCAV_FLOOR_BUFFER/DOG_FLOOR_BUFFER) —
+# same class of issue as the old RIDER_TARGET_PCT cross-import. Editing this
+# value retunes three fleets at once, not just Rider. Slated to split into
+# SCAV_FLOOR_BUFFER / DOG_FLOOR_BUFFER after 2026-08-14; see
+# docs/CHANGELOG.md "Gate-parity audit — decisions".
 RIDER_FLOOR_BUFFER = 1.05          # rider stays out if price < floor*1.05 (that's CORE territory)
 # Catch-band floor: entry must be BELOW the pullback trigger but ABOVE this, or it's
 # a real breakdown, not a dip -- that's CORE's mechanical ladder's job, not a rejected

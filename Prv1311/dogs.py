@@ -283,6 +283,13 @@ def run_cycle(s, universe):
             windows[f'{d}d'] = {'high': hi, 'low': lo, 'drop_pct': round(drop_pct, 2)}
             max_drop = max(max_drop, drop_pct)
 
+        # GATE-PARITY AUDIT (2026-08-12): one-sided trigger, no catch-band
+        # ceiling. rider_team.py/scavengers.py both pair their pullback
+        # trigger with an upper crash-filter (RIDER_MAX_DROP_PCT /
+        # SCAV_MAX_DROP_PCT) so a genuine breakdown routes to CORE instead of
+        # being caught here as a "dip". Dogs never got the matching ceiling —
+        # confirmed gap, not a design choice. Fix deferred to after
+        # 2026-08-14 (see docs/CHANGELOG.md "Gate-parity audit — decisions").
         is_candidate = max_drop >= DOG_PULLBACK_PCT
         if not is_candidate:
             continue

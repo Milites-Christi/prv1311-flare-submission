@@ -31,6 +31,24 @@ BREACH TRIGGER: *** PLACEHOLDER — Clay is researching the real trigger. ***
   "crash has started" signal already available). When the real security-feature
   trigger is ready, swap the body of core_breach() — it's the ONE place to change.
 
+DESIGN NOTES (2026-08-12 gate-parity audit — reviewed and decided; do not
+re-raise without re-reading this):
+  - REGIME GATE DELIBERATELY ABSENT. classify_regime() reports 'reverting' or
+    'trending_up'. CORE is the bear/crash engine: it exists specifically to
+    enter breaches while price is trending_down. Wiring the regime gate here
+    would reject every entry this fleet exists to make. Same class of
+    deliberate carve-out as the flow gate guarding rung 0 only in rider_team.py.
+  - RIDER_FLOOR_BUFFER IMPORT IS DEAD AND MUST STAY DEAD. core_breach() fires
+    on price BELOW the 90-day floor; the floor buffer requires
+    price >= floor * 1.05. The two conditions are mutually exclusive by
+    construction — wiring it would stop CORE from ever firing. Scheduled for
+    deletion, not for wiring.
+  - ANOMALY GATE IS A GENUINE GAP. Wiring deferred to after 2026-08-14. The
+    catch-band elsewhere in this system routes below-band crashes TO CORE, so
+    an unwinding blow-off top (see HFT: ~3.5x pump then ~74% collapse) reaches
+    CORE looking identical to a real breakdown, and the 6-2-1-1 ladder under
+    never-cut would pin four rungs into it.
+
 ISOLATED: own pool, ledger, core_state table, own page. Same 20%-of-profit fee.
 ================================================================================
 """

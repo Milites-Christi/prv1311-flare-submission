@@ -173,12 +173,15 @@ def is_excluded(base):
     return base in STABLE_EXCLUDES or base in DENYLIST
 
 
-def daily_closes(symbol, limit=120):
+def daily_closes(symbol, limit=120, ohlcv_fn=None):
     """Daily closes for the regime gate + anomaly gate. None on failure.
     Routed through screener's shared per-cycle cache (Task E) -- same values,
-    fewer round trips."""
+    fewer round trips. ohlcv_fn: optional override, same shape as
+    get_daily_ohlcv(symbol, limit) -- see calculate_90_day_floor's docstring
+    in screener.py for why this exists."""
     try:
-        ohlcv = get_daily_ohlcv(symbol, limit)
+        fetch = ohlcv_fn or get_daily_ohlcv
+        ohlcv = fetch(symbol, limit)
         return [row[4] for row in ohlcv] if ohlcv else None
     except Exception:
         return None
@@ -338,9 +341,18 @@ def close_rider(s, sym, price):
     del s['riders'][sym]
 
 
-def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file=None, sizing=SIZING, user_id=None):
-    clear_daily_cache()  # explicit, not TTL -- a stale daily series carried
-                         # across cycles is worse than an extra call (Task E)
+def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file=None,
+              sizing=SIZING, user_id=None, ohlcv_fn=None, clear_cache_fn=clear_daily_cache):
+    # ohlcv_fn/clear_cache_fn: optional override for the daily-candle source
+    # feeding the anomaly gate, the floor, the 7-day high, and the regime
+    # gate below -- same shape as get_daily_ohlcv/clear_daily_cache. Every
+    # existing caller passes neither and gets byte-identical Coinbase
+    # behavior; rider_flare.py injects flare.coingecko_adapter's versions
+    # instead. Nothing about the comparisons below (pullback_ok, floor
+    # buffer, regime membership, anomaly veto) changes either way -- only
+    # where their inputs come from.
+    clear_cache_fn()  # explicit, not TTL -- a stale daily series carried
+                      # across cycles is worse than an extra call (Task E)
     cycle_id = str(uuid.uuid4())
     symbols_evaluated = 0
     halt_reason = None
@@ -412,14 +424,14 @@ def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file
         # --- ANOMALY GATE: quarantine a name coming off a blow-off pump, before
         # any further evaluation -- a dip off an artificially-pumped high isn't a
         # real dip. Must run BEFORE the pullback/catch-band check by design. ---
-        anomaly = check_anomaly(daily_closes(sym, limit=60))
+        anomaly = check_anomaly(daily_closes(sym, limit=60, ohlcv_fn=ohlcv_fn))
         if anomaly.veto:
             print(f"  [RIDER SKIP] {base:<6} anomaly veto (r7={anomaly.r7:.3f}, z={anomaly.z})")
             record['block_reason'] = 'anomaly_veto'
             log_decision(record)
             continue
 
-        floor = calculate_90_day_floor(sym)
+        floor = calculate_90_day_floor(sym, ohlcv_fn=ohlcv_fn)
         record['floor_value'] = floor
         cc = get_candle_count(sym)
         record['candle_count'] = cc
@@ -429,7 +441,7 @@ def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file
             log_decision(record)
             continue
 
-        high7 = rolling_7_day_high(sym)
+        high7 = rolling_7_day_high(sym, ohlcv_fn=ohlcv_fn)
         record['rolling_7d_high'] = high7
         if high7 is None:
             record['block_reason'] = 'high7_fetch_failed'
@@ -460,7 +472,7 @@ def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file
         # The floor buffer above is the falling-knife guard; trending_down is
         # still skipped here as a second line of defense.
         if USE_REGIME_GATE:
-            closes = daily_closes(sym)
+            closes = daily_closes(sym, ohlcv_fn=ohlcv_fn)
             reg = classify_regime(closes)['regime'] if closes else 'no_data'
             record['regime_label'] = reg
             record['regime_ok'] = reg in RIDER_OK_REGIMES
@@ -521,7 +533,8 @@ def run_cycle(s, universe, price_fn=fetch_live_price, fleet='rider', ledger_file
 def run_engine(price_fn=fetch_live_price, fleet='rider', ledger_file=None,
                health_component='rider_engine', state_table='rider_state',
                universe_fn=None, log_name='rider_team', sizing=SIZING, user_id=None,
-               state_row_key=None, state_key_column=None):
+               state_row_key=None, state_key_column=None,
+               ohlcv_fn=None, clear_cache_fn=clear_daily_cache):
     _install_rotating_log(log_name)
 
     # rider_health has no user_id column -- component is already a free-text
@@ -582,7 +595,8 @@ def run_engine(price_fn=fetch_live_price, fleet='rider', ledger_file=None,
             print(f"\n[{time.strftime('%H:%M:%S')}] Fetching universe...")
             universe = universe_fn() if universe_fn else get_universe_markets(limit=50)
             print(f"  {len(universe)} assets (market + watchlist)")
-            run_cycle(s, universe, price_fn=price_fn, fleet=fleet, ledger_file=ledger_file, sizing=sizing, user_id=user_id)
+            run_cycle(s, universe, price_fn=price_fn, fleet=fleet, ledger_file=ledger_file, sizing=sizing,
+                     user_id=user_id, ohlcv_fn=ohlcv_fn, clear_cache_fn=clear_cache_fn)
 
             held_val = 0.0
             for sym, r in s['riders'].items():

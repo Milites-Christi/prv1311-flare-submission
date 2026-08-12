@@ -305,6 +305,219 @@ filename list (23 names existing at both paths) is flagged for Clay's
 manual review, not resolved here. Merge commit `dd83a2e`, pushed clean
 to `origin/main`.
 
+### Added — startup delay for the three services exposed to the exit-78 risk
+
+Followed up on the exit-78 recommendation logged earlier instead of leaving
+it as a dangling suggestion. Checked which scheduled entry points actually
+import `flare.price_adapter` (the module whose live Flare-mainnet RPC call
+at Python import time is the traced, unproven cause of the boot-time exit-78
+incident) — only three, not all eight:
+
+- `install_anchor_writer_task.ps1` (`flare.anchor_writer` → `flare.deploy_anchor`
+  → `flare.price_adapter`)
+- `install_divergence_recorder_task.ps1` (`flare.divergence_recorder` →
+  `flare.price_adapter`)
+- `install_rider_flare_task.ps1` (`flare.rider_flare` → `flare.price_adapter`)
+
+The other five (FootprintWorker, RiderTeam, RunAll, SoloRider,
+OnchainDivergenceRecorder) don't import it and aren't exposed to this
+specific race — left untouched rather than applying the fix everywhere on
+the theory that more caution can't hurt. Added `$Trigger.Delay = "PT2M"` to
+each of the three, with a comment explaining exactly why. This does not fix
+the underlying import-time network dependency — it avoids racing the
+narrow post-boot window where it's most likely to fail. Syntax-verified via
+`[System.Management.Automation.Language.Parser]::ParseFile` (parse only,
+nothing executed/registered). Still requires Clay to actually run
+`reregister_all_tasks.ps1` from an elevated session for this to take effect.
+
+---
+
+### Gate-parity audit
+
+Read-only audit, no code changed. Scope: `Prv1311\` only (including `Prv1311\flare\`) —
+the 19 same-named `.py` files at the repo root (`backtest.py`, `portfolio_state.py`,
+`rider.py`, `scanner.py`, `pipeline.py`, `scorecard.py`, etc.) are the stale
+Binance.US-era research lab, not live code, and none of them define any of the 15
+gates below. **Stale-root check: clean — zero gate-defining files (`screener.py`,
+`config.py`, `dynamic_rsi.py`, `taker_absorption.py`, `vwap_bands.py`,
+`orderbook_imbalance.py`, `regime.py`, `confluence_gate.py`, `anomaly_gate.py`,
+`flip_ewma_buyzone.py`, `flip_cheap_window.py`) exist at root at all.**
+
+**Live entry path per fleet** (RUNNER RULE — a gate only counts if it runs on this path):
+
+| Fleet | Driven by | `run_engine()` status |
+| --- | --- | --- |
+| `rider_team.py` | own Windows service → `run_engine()` → `run_cycle()` | live (it's the service loop) |
+| `scavengers.py` | `run_all.py` → `run_cycle()` directly | dead path |
+| `core.py` | `run_all.py` → `run_cycle()` directly | dead path |
+| `markov.py` | `run_all.py` → `run_cycle(s)` directly | dead path |
+| `dogs.py` | `run_all.py` → `run_cycle()` directly | dead path |
+| `solo_rider.py` | own Windows service → `run_service()` → `rider_team.run_cycle()` per user config | n/a (never calls its own `run_engine()`) |
+| `flare/rider_flare.py` | own Windows service → `rider_team.run_engine()` → `run_cycle()`, with `price_fn`=FTSO, `ohlcv_fn`=CoinGecko, `universe_fn`=fixed 16-symbol list | live (same service-loop shape as rider_team) |
+
+Two lines flagged ambiguous before this audit are now resolved: `rider_team.py`
+578–583 is the startup print banner inside `run_engine()` (`gates += " | regime..."`
+etc.), not a second live gate check — the real evaluation is in `run_cycle()`.
+`core.py` 338's `check_flow()` call has no `USE_FLOW_GATE` toggle guarding it — it's
+unconditional, unlike the flagged version in `rider_team.py`/`scavengers.py` (see
+matrix note below).
+
+**Matrix** — WIRED / FLAGGED_OFF / DEAD_PATH / IMPORTED_UNUSED / MISSING:
+
+| Gate | rider_team.py | scavengers.py | core.py | markov.py | dogs.py | solo_rider.py | rider_flare.py |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| VWAP bands | MISSING | MISSING | MISSING | MISSING | WIRED | MISSING | MISSING |
+| Regime gate | WIRED | WIRED | MISSING | MISSING | WIRED | WIRED | WIRED |
+| OBI gate | WIRED | WIRED | WIRED | MISSING | WIRED | WIRED | WIRED |
+| Flow gate | WIRED (flagged) | WIRED (flagged) | WIRED (**unflagged**) | MISSING | MISSING | WIRED (flagged) | WIRED (flagged) |
+| Confluence gate | MISSING | MISSING | MISSING | WIRED | MISSING | MISSING | MISSING |
+| Anomaly gate | WIRED | WIRED | MISSING | MISSING | MISSING | WIRED | WIRED |
+| Catch-band (MAX_DROP_PCT) | WIRED | WIRED | MISSING | MISSING | MISSING | WIRED | WIRED |
+| Ticker sanity check | WIRED | WIRED | WIRED | MISSING | WIRED | WIRED | FLAGGED_OFF (replaced by FTSO) |
+| Dynamic RSI | MISSING | MISSING | MISSING | MISSING | WIRED | MISSING | MISSING |
+| Taker absorption | MISSING | MISSING | MISSING | MISSING | WIRED | MISSING | MISSING |
+| Maturity gate (90d floor) | WIRED | WIRED | WIRED | MISSING | WIRED | WIRED | WIRED |
+| Floor buffer | WIRED | WIRED | **IMPORTED_UNUSED** | MISSING | WIRED | WIRED | WIRED |
+| Liquidity (MIN_24H_USD_VOLUME) | WIRED | WIRED | WIRED | MISSING | WIRED | MISSING (bypassed) | MISSING (bypassed) |
+| EWMA buy-zone | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* |
+| Cheap window | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* | MISSING* |
+
+\* EWMA buy-zone (`flip_ewma_buyzone.py`) and Cheap Window (`flip_cheap_window.py`)
+are not fleet gates at all — they're standalone research jobs in `run_all.py`'s
+`JOBS` list (`EWMA`, `CHEAP`), each with its own ledger/push, called by no fleet.
+Same dual-purpose pattern noted for two other "gates": `regime.py` and
+`orderbook_imbalance.py` each export the function a fleet imports (`classify_regime`,
+`obi_gate`) **and** separately run their own `run_cycle()` as an independent
+`REGIME`/`OBI` lab job in `run_all.py` — two different call paths off the same file,
+neither one dead. No gate-shaped module outside the 15 listed was found.
+
+**(A) DELIBERATE** — evidence quoted from the code:
+
+- **Markov's near-total absence from the matrix** (no VWAP/RSI/absorption/regime/OBI/
+  flow/anomaly/catch-band/maturity/liquidity/ticker-sanity). `markov.py` docstring:
+  *"Liquidity-sweep + reclaim + RSI-divergence engine... CONFLUENCE GATE (wired above
+  the fire path)... ISOLATED: own hourly data layer (markov_screener), own ledger,
+  own page."* It runs `confluence_gate()` as its one and only fire-gate; everything
+  else in the matrix belongs to a pullback-from-high architecture Markov doesn't use.
+- **Dogs' absence of flow gate and anomaly gate.** `dogs.py` docstring lists its gate
+  stack explicitly: *"4. checks the REGIME gate (daily reverting) and OBI gate (book
+  toxicity)"* — two gates named, no third or fourth. Flow and anomaly are absent
+  because they were never in the design, not because they broke.
+- **VWAP/Dynamic-RSI/Taker-absorption wired only in dogs.py.** `dogs.py` docstring:
+  *"runs the existing triple-confirmation (RSI + absorption + VWAP) for a probability
+  read"* — framed as this fleet's own experimental instrumentation (*"A TEST BENCH,
+  not a finished strategy"*), not a baseline every fleet should have.
+- **rider_flare's ticker-sanity check replaced, not wired.** Its own docstring:
+  *"the price used for entry/exit decisions is FTSO... This is a pure data-source
+  swap through the same ohlcv_fn parameter mechanism price_fn already used."* FTSO
+  has no `MAX_TICKER_DIVERGENCE_PCT`-style check; that specific Coinbase-tuned gate
+  doesn't apply once the price source changes.
+- **rider_flare's liquidity gate bypassed by design.** `_universe()`'s docstring:
+  *"Fixed to the confirmed FTSOv2 A/B set -- not a live market scan."* There's no
+  market scan step to filter by `MIN_24H_USD_VOLUME` against.
+- **solo_rider excluded from this A/B split per the task's own scope** (its one
+  liquidity-bypass difference is the direct, documented consequence of *"WHAT THE
+  USER ACTUALLY GETS TO SET: asset choice and capital amount"* — the user's single
+  chosen asset skips the market-scan liquidity pre-filter that only exists to narrow
+  a market-wide candidate list down).
+
+**(B) UNEXPLAINED — candidate bugs:**
+
+- **`core.py` has no regime gate and no anomaly gate anywhere in the file** — not
+  imported, not called, no `USE_REGIME_GATE`/`USE_ANOMALY_GATE` flag, and no comment
+  anywhere in `core.py` explaining the absence the way `dogs.py`'s docstring
+  explains its own gaps. Evidence absent either way; flagging as a candidate bug
+  rather than assuming intent.
+- **`core.py` imports `RIDER_FLOOR_BUFFER` (line 43) but never uses it.** No
+  `above_floor_buffer`-style check exists anywhere in `core.py`, unlike
+  `rider_team.py`/`scavengers.py`/`dogs.py`, which all import the same constant and
+  actually gate on it. Dead import, no comment explaining why it was left in — looks
+  like a partially-finished port of the floor-buffer check that never got wired up.
+- **`dogs.py` has no catch-band ceiling** (no `DOG_MAX_DROP_PCT`, no `MAX_DROP_PCT`
+  reference of any kind). `rider_team.py` and `scavengers.py` both pair their
+  pullback trigger with an upper crash-filter; `dogs.py`'s docstring describes its
+  entry trigger (*"price >= DOG_PULLBACK_PCT below ANY window high"*) but never
+  mentions, positively or negatively, a ceiling. Evidence absent either way —
+  flagging as B, not assuming the omission was intentional.
+
+**Threshold table** — every gate WIRED in more than one fleet:
+
+| Gate | rider_team / solo_rider / rider_flare | scavengers | dogs | core | Defined in |
+| --- | --- | --- | --- | --- | --- |
+| Pullback trigger | `RIDER_PULLBACK_PCT` = 10.0% | `SCAV_PULLBACK_PCT` = 5.0% | `DOG_PULLBACK_PCT` = 10.0% | n/a (mechanical ladder, `core_breach()`) | `config.py` |
+| Catch-band ceiling | `RIDER_MAX_DROP_PCT` = 30.0% | `SCAV_MAX_DROP_PCT` = 20.0% | **none** | n/a | `config.py` |
+| Floor buffer | `RIDER_FLOOR_BUFFER` = 1.05 (imported directly, not fleet-prefixed) | same `RIDER_FLOOR_BUFFER` (imported directly) | same `RIDER_FLOOR_BUFFER` (imported directly) | same `RIDER_FLOOR_BUFFER`, imported but unused | `config.py` |
+| Liquidity floor | `MIN_24H_USD_VOLUME` = $1,000,000/day (all fleets share one global value) | same | same | same | `config.py` |
+| Ticker divergence | `MAX_TICKER_DIVERGENCE_PCT` = 50.0% (rider_flare: n/a, FTSO-priced) | same | same | same | `config.py` |
+| Regime / OBI / Flow / Anomaly | shared function logic (`classify_regime`, `obi_gate`, `check_flow`, `check_anomaly`) — no fleet-specific threshold constant found in `config.py` for any of these four | same | same (regime+OBI only) | same (OBI+flow only) | `regime.py` / `orderbook_imbalance.py` / `footprint`-based flow module / `anomaly_gate.py` |
+
+**Flags:**
+
+- **(a) Cross-import** — `scavengers.py` and `dogs.py` both import `RIDER_FLOOR_BUFFER`
+  directly rather than having their own `SCAV_FLOOR_BUFFER`/`DOG_FLOOR_BUFFER`. Same
+  class of issue as the historical `RIDER_TARGET_PCT` cross-import. Not necessarily
+  wrong — the buffer marks CORE's territory, which is fleet-agnostic by definition —
+  but it means a future tune of `RIDER_FLOOR_BUFFER` silently retunes three other
+  fleets at once with no fleet-specific override point.
+- **(b) Scale mismatch** — Scav got a properly-paired, independently-scaled
+  pullback/catch-band pair (`config.py` comments show the math: -5% pullback / 3-day
+  lookback / 20% ceiling, sized off its own worst real entry). Dogs shares Rider's
+  exact -10% pullback number but has no catch-band ceiling at all — the one pair in
+  the table that was meant to scale together (per the Rider/Scav precedent) and
+  didn't get a second half.
+
+Full grep evidence, line numbers, and docstring quotes for every cell above are in
+this session's working notes; not reproduced here in full to keep this entry
+readable. **No code changed. Waiting on Clay's decision on wiring order before
+touching anything.**
+
+---
+
+### Gate-parity audit — decisions
+
+Clay reviewed the B-list from the audit above. Documentation-only pass — comments
+and docstrings added at each site so the reasoning travels with the code; no
+executable line touched anywhere.
+
+**Rejected — not bugs, do not re-raise:**
+
+- **`core.py`'s missing regime gate.** `classify_regime()` reports `'reverting'`
+  or `'trending_up'`. CORE is the bear/crash engine — it exists to enter breaches
+  while price is trending down. Wiring the regime gate would reject every entry
+  the fleet exists to make. Same class of deliberate carve-out as the flow gate
+  guarding rung 0 only in `rider_team.py`. DESIGN NOTES added to `core.py`'s
+  module docstring.
+- **`core.py`'s dead `RIDER_FLOOR_BUFFER` import.** `core_breach()` fires on
+  price BELOW the 90-day floor; the floor buffer requires
+  `price >= floor * 1.05`. Mutually exclusive by construction — wiring it would
+  stop CORE from ever firing. The import stays, but it's now marked in the
+  module docstring as scheduled for **deletion**, not for connecting.
+
+**Confirmed gap — real, fix deferred to after 2026-08-14:**
+
+- **`core.py`'s missing anomaly gate.** The catch-band elsewhere in this system
+  routes below-band crashes to CORE by design, so an unwinding blow-off top
+  (see HFT: ~3.5x pump then ~74% collapse) reaches CORE looking identical to a
+  real breakdown — and the 6-2-1-1 ladder under never-cut would pin four rungs
+  into it. Flagged in `core.py`'s module docstring.
+- **`dogs.py`'s missing catch-band ceiling.** Dogs shares Rider's exact -10%
+  pullback trigger but never got the matching upper crash-filter Rider
+  (`RIDER_MAX_DROP_PCT`) and Scav (`SCAV_MAX_DROP_PCT`) both have. Comment added
+  at the trigger line (`is_candidate = max_drop >= DOG_PULLBACK_PCT`).
+
+**Threshold flag, unchanged status:** `RIDER_FLOOR_BUFFER` (`config.py`) is still
+cross-imported directly by `scavengers.py` and `dogs.py` — same class of issue as
+the old `RIDER_TARGET_PCT` cross-import. Comment added above the constant;
+editing it retunes three fleets at once until it's split.
+
+**Wiring order, once 2026-08-14 passes:**
+
+1. Anomaly gate into `core.py`
+2. Catch-band ceiling into `dogs.py`
+3. Split `RIDER_FLOOR_BUFFER` into `SCAV_FLOOR_BUFFER` / `DOG_FLOOR_BUFFER`, and delete the dead `RIDER_FLOOR_BUFFER` import from `core.py`
+
+No code behavior changed by this pass — comments and docstrings only.
+
 ---
 
 ## 2026-08-11

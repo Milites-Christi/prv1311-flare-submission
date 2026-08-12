@@ -201,7 +201,17 @@ def poll_orders():
         return
 
     for o in orders:
-        user_id = o.get("created_by") or o.get("user_id") or "unknown"
+        user_id = o.get("created_by_id")
+        if not user_id:
+            record_health("solo_rider_intake", "MISSING_USER_ID", {
+                "order_id": o.get("id"),
+                "asset": o.get("asset"),
+                "capital": o.get("capital"),
+            }, 0)
+            print(f"[intake][PAPER] skipped order {o.get('id')} -- "
+                  f"no created_by_id on the SoloOrder record, refusing to fall "
+                  f"back to a placeholder user_id.")
+            continue
         asset = normalize_symbol(o.get("asset"))
         capital = o.get("capital", 0)
         try:

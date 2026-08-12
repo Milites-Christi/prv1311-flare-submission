@@ -167,7 +167,7 @@ def _percentile(sorted_vals, p):
     return sorted_vals[low] + frac * (sorted_vals[high] - sorted_vals[low])
 
 
-def calculate_90_day_floor(symbol, lookback_days=90, percentile=5):
+def calculate_90_day_floor(symbol, lookback_days=90, percentile=5, ohlcv_fn=None):
     """
     CORE trigger: 5th-percentile of the last ~90 daily closes.
 
@@ -177,10 +177,17 @@ def calculate_90_day_floor(symbol, lookback_days=90, percentile=5):
     its true age. LIGHTER (~199 candles, launched Dec 2025) fails this; XLM
     (~300, capped) passes. This guards against unseasoned coins whose 90-day
     floor is a pre-unlock guess. Returns None if too young OR on failure.
+
+    ohlcv_fn: optional override for the candle source, same call/return shape
+    as get_daily_ohlcv(symbol, limit). Every existing caller passes nothing
+    and gets byte-identical Coinbase behavior -- this exists so rider_flare.py
+    can inject flare.coingecko_adapter.get_cg_daily_ohlcv instead, without a
+    second copy of this function's math.
     """
     pair = symbol if '/' in symbol else f"{symbol}/{QUOTE}"
+    fetch = ohlcv_fn or get_daily_ohlcv
     try:
-        ohlcv = get_daily_ohlcv(symbol, MAX_DAILY_CANDLES)
+        ohlcv = fetch(symbol, MAX_DAILY_CANDLES)
         if not ohlcv:
             return None
         # MATURITY GATE
@@ -196,11 +203,13 @@ def calculate_90_day_floor(symbol, lookback_days=90, percentile=5):
         return None
 
 
-def rolling_7_day_high(symbol, lookback_days=7):
-    """RIDER reference: highest close in the last N days. None on failure."""
+def rolling_7_day_high(symbol, lookback_days=7, ohlcv_fn=None):
+    """RIDER reference: highest close in the last N days. None on failure.
+    ohlcv_fn: same override as calculate_90_day_floor -- see its docstring."""
     pair = symbol if '/' in symbol else f"{symbol}/{QUOTE}"
+    fetch = ohlcv_fn or get_daily_ohlcv
     try:
-        ohlcv = get_daily_ohlcv(symbol, lookback_days + 2)
+        ohlcv = fetch(symbol, lookback_days + 2)
         if not ohlcv or len(ohlcv) < 3:
             return None
         closes = [row[4] for row in ohlcv[-lookback_days:]]
