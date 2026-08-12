@@ -293,6 +293,18 @@ shared a cause.
   confirmed fresh and matching their real current balances immediately
   after the fix — not assumed, checked directly against the database.
 
+### Merged — local repo and GitHub's pre-existing unrelated history
+
+Merged local `main` (9 commits) with `origin/main`'s pre-existing,
+unrelated history (2 commits, created directly on GitHub) via
+`--allow-unrelated-histories`, resolving the one real conflict
+(`.gitignore`) by union of both sides rather than picking one — no
+commits rewritten, squashed, or dropped on either side. No other files
+were deleted or reconciled; the resulting root-vs-`Prv1311/` duplicate
+filename list (23 names existing at both paths) is flagged for Clay's
+manual review, not resolved here. Merge commit `dd83a2e`, pushed clean
+to `origin/main`.
+
 ---
 
 ## 2026-08-11
