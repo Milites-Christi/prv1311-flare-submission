@@ -533,6 +533,301 @@ only.
 
 ---
 
+### A/B comparison window established
+
+Read-only investigation, no code changed. Goal: find the earliest timestamp
+from which `rider` (Coinbase-priced) and `rider_flare` (FTSO-priced) are
+genuinely comparable, since `rider_decisions` alone shows `rider_flare`'s
+first row at `2026-08-07T23:20:04Z` — 15+ hours after `rider`'s first row
+at `2026-08-07T07:57:26Z` — and a first-row gap like that could mean either
+a later start, or an engine that was already running with decision-logging
+wired in late. Checked directly rather than assuming either.
+
+**Query 1 — `rider_cycles` min/max/count by fleet** (the authoritative
+cycle record, independent of decision logging):
+
+| fleet | min ts | max ts | count |
+| --- | --- | --- | --- |
+| `rider` | 2026-08-07T07:57:25.988Z | 2026-08-12T17:22:50.562Z | 492 |
+| `rider_flare` | 2026-08-07T23:20:03.929Z | 2026-08-12T17:22:33.178Z | 416 |
+
+**Query 2 — `rider_health` STARTUP rows for the real component names**
+(`rider_engine`, `rider_flare_engine` — confirmed against the actual
+distinct `component` list, not assumed):
+
+| component | ts | detail (excerpt) |
+| --- | --- | --- |
+| `rider_engine` | 2026-08-07T08:29:13.814Z | first STARTUP row for rider |
+| `rider_engine` | 2026-08-07T09:36:41.665Z | restart |
+| `rider_engine` | 2026-08-07T09:48:29.527Z | restart |
+| `rider_engine` | 2026-08-07T09:55:36.963Z | restart |
+| `rider_engine` | 2026-08-07T23:05:49.620Z | restart |
+| `rider_engine` | 2026-08-07T23:07:32.866Z | restart |
+| **`rider_flare_engine`** | **2026-08-07T23:19:51.756Z** | **first-ever STARTUP row for rider_flare, any date** |
+
+No `rider_flare_engine` STARTUP row exists anywhere before
+`2026-08-07T23:19:51Z` — not on the 7th, not earlier. If the engine had
+been running earlier with logging wired in late, an earlier STARTUP row
+would still exist (STARTUP fires once per process start, independent of
+decision logging). It doesn't. This directly rules out the "already
+running, logging wired in late" hypothesis raised in the task.
+
+**Query 3 — gap between rider_flare's first CYCLE and first DECISION:**
+
+| event | ts |
+| --- | --- |
+| first `rider_flare` cycle (`rider_cycles`) | 2026-08-07T23:20:03.929Z |
+| first `rider_flare` decision (`rider_decisions`) | 2026-08-07T23:20:04.069Z |
+
+Gap: **140 milliseconds** — the decision row is written by the same cycle
+that started the engine, not a later one. Zero cycles exist before the
+first decision row. Combined with Query 2 (STARTUP at 23:19:51Z, 12s
+before the first cycle — normal engine-init time, not an idle gap),
+`rider_flare` genuinely started at ~23:19:51-23:20:04Z on 2026-08-07, full
+stop. It is not a late-logging artifact.
+
+**Query 4 — hourly `rider_cycles` coverage, 2026-08-07 through 2026-08-12,
+looking for hours where one fleet has cycles and the other has none:**
+
+16 asymmetric hours found, **all of them 2026-08-07T07:00Z-22:00Z** — i.e.
+every one of them is before `rider_flare` existed at all (expected, not an
+outage):
+
+| hour (UTC) | rider | rider_flare |
+| --- | --- | --- |
+| 08-07 07:00 – 08-07 22:00 (16 consecutive hours) | 1-6/hr | 0 |
+
+**Zero asymmetric hours found anywhere from 2026-08-07T23:00Z onward** —
+once both engines are up, neither one goes dark while the other keeps
+running, all the way through the most recent data
+(2026-08-12T17:00Z). This is the answer to the specific concern raised:
+no one-sided outage biases the comparison anywhere in the overlap.
+
+**Found but not asked for — a joint outage, reported for completeness:**
+7 fully-empty hours, **2026-08-10T06:00Z through 2026-08-10T12:00Z**, where
+*both* `rider` and `rider_flare` have zero cycles (neither fleet appears in
+`rider_cycles` at all for that stretch). Symmetric — it does not bias the
+A/B comparison the way a one-sided gap would — but it does shrink the
+number of comparable hours inside the window by 7, so it's logged rather
+than left implicit.
+
+**Query 5 — distinct `fleet` values, both tables, to rule out early
+`rider_flare` data hiding under another label:**
+
+| table | fleet | min ts | max ts | count |
+| --- | --- | --- | --- | --- |
+| `rider_decisions` | `rider` | 2026-08-07T07:57:26.195Z | 2026-08-12T17:22:50.714Z | 36,008 |
+| `rider_decisions` | `rider_flare` | 2026-08-07T23:20:04.069Z | 2026-08-12T17:22:33.289Z | 6,672 |
+| `rider_decisions` | `scav` | 2026-08-07T16:06:48.103Z | 2026-08-12T17:15:00.328Z | 3,332 |
+| `rider_decisions` | `solo_rider` | 2026-08-10T01:56:19.831Z | 2026-08-12T17:24:09.238Z | 3,046 |
+| `rider_cycles` | `rider` | 2026-08-07T07:57:25.988Z | 2026-08-12T17:22:50.562Z | 492 |
+| `rider_cycles` | `rider_flare` | 2026-08-07T23:20:03.929Z | 2026-08-12T17:22:33.178Z | 416 |
+| `rider_cycles` | `scav` | 2026-08-07T10:17:53.231Z | 2026-08-12T17:15:00.225Z | 706 |
+| `rider_cycles` | `solo_rider` | 2026-08-10T01:56:19.576Z | 2026-08-12T17:24:09.128Z | 3,045 |
+
+Only 4 distinct fleet values exist in either table, in both tables. No
+orphaned or differently-spelled `rider_flare` label anywhere, and
+`rider_flare`'s earliest row in both tables lines up to the millisecond
+range already established above — no earlier data was hiding under another
+name.
+
+**Conclusion.** The earliest timestamp from which both engines were
+genuinely running and logging comparably is **`2026-08-07T23:20:04Z`**
+(round: 23:20Z), backed by four independent checks agreeing to the second:
+`rider_flare_engine`'s only STARTUP row (23:19:51Z), its first cycle
+(23:20:03.929Z), its first decision (23:20:04.069Z), and zero fleet-labeled
+data anywhere earlier. The comparison window is
+**2026-08-07T23:20:04Z → present (data through 2026-08-12T17:22Z, both
+engines still running)**, with one known, symmetric 7-hour joint blackout
+on 2026-08-10T06:00Z-12:00Z that reduces the sample but does not bias it.
+No code changed — investigation only.
+
+---
+
+### Post-Windows-update health check
+
+Read-only investigation, no code changed. Trigger: a Windows update
+installed overnight and the machine was found powered off this morning.
+**Permissions note:** this session runs non-elevated, so `Get-ScheduledTask`
+cannot distinguish "task missing" from "task present but unreadable" for
+SYSTEM-owned tasks — it was not run. Supabase (`rider_health`,
+`rider_decisions`, `rider_cycles`, `anchor_log`) was used as the
+authoritative source instead, per standing guidance.
+
+**1 — Shutdown/boot timeline.** Three chained, planned restarts (event ID
+`1074`, not the unexpected `6008` pattern), all Windows-Update-initiated:
+
+| ts (local, EDT) | ts (UTC) | Event | Initiator | Reason |
+| --- | --- | --- | --- | --- |
+| 4:14:08 AM | 08:14:08Z | 1074 | `MoUsoCoreWorker.exe` | Service pack (Planned) |
+| 4:20:52 AM | 08:20:52Z | 1074 | `TrustedInstaller.exe` | OS Upgrade (Planned) |
+| 4:21:53 AM | 08:21:53Z | 1074 | `TrustedInstaller.exe` | OS Upgrade (Planned) |
+| 4:22:30 AM | **08:22:30Z** | — | `LastBootUpTime` | final boot complete |
+
+All three are **clean/planned shutdowns**, not the unexpected-shutdown
+signature (`6008`) — that event does exist in the log, but it's dated
+2026-08-11 3:29:23 PM, a day earlier and already investigated separately;
+not part of this incident, noted here only so it isn't conflated. No
+shutdown/restart event of any kind appears in the System log after
+08:22:30Z — the machine has been up continuously since, confirmed by this
+live session running commands on it right now. The "found powered off"
+observation isn't contradicted by the log, but the log alone doesn't
+explain it either — most likely caught mid-chain during the ~8-minute,
+3-restart sequence; Clay should confirm what he actually saw and when.
+
+**2 — What was installed** (`Get-HotFix`, top 5 by `InstalledOn`):
+
+| KB | Type | InstalledOn |
+| --- | --- | --- |
+| KB5123304 | Security Update | 8/12/2026 |
+| KB5121003 | Security Update | 8/12/2026 |
+| KB5120708 | Update | 8/12/2026 |
+| KB5120102 | Security Update | 7/14/2026 (pre-existing) |
+| KB5070349 | Update | 11/14/2025 (pre-existing) |
+
+**3 — Power settings — the highest-risk item. All three still hold.**
+(Disk idle timeout lives under `SUB_DISK`, not `SUB_SLEEP` as the given
+command queried — pulled separately to actually answer the question.)
+
+| Setting | AC value | Meaning |
+| --- | --- | --- |
+| Standby (`STANDBYIDLE`) | `0x00000000` | 0s = never sleep — **matches Clay's setting** |
+| Hibernate (`HIBERNATEIDLE`) | `0x00000000` | 0s = never hibernate — **matches** |
+| Disk idle (`DISKIDLE`) | `0x00000000` | 0s = never spin down — **matches** |
+| Hibernate feature | — | `powercfg /a`: "Hibernation has not been enabled" — off at the system level, not just idle-timeout |
+
+**No recurrence of the 2026-08-10 pattern.** The Windows update did not
+reset the power plan.
+
+**4 — Did the services come back** (`rider_health` STARTUP rows after
+boot):
+
+| component | first STARTUP after 08:22:30Z |
+| --- | --- |
+| `onchain_divergence_recorder` | 08:23:14.334Z |
+| `rider_engine` | 08:23:15.536Z |
+| `run_all` | 08:23:15.479Z |
+| `footprint_worker` | 08:23:15.548Z |
+| `solo_rider_service` | 08:23:15.516Z *(logs as `STARTUP_PAPER`, not `STARTUP` — see below)* |
+| `rider_flare_engine` | 08:23:41.279Z |
+| `divergence_recorder` | 08:23:41.988Z |
+| `anchor_writer` | 08:23:45.080Z |
+
+**All 8 of 8 came back**, clustered within 31 seconds of each other
+(08:23:14Z-08:23:45Z), consistent with every `AtStartup` scheduled task
+firing together right after boot. One correction made mid-investigation:
+an initial query filtering `status='STARTUP'` reported `solo_rider_service`
+as missing — false negative. That component logs its startup status as
+`STARTUP_PAPER`, not `STARTUP` (confirmed against its full history: all 6
+rows ever recorded for this component use `STARTUP_PAPER`, going back to
+2026-08-10). Re-queried on the correct status value and found its row at
+08:23:15.516Z, in the same cluster as everything else.
+
+**5 — Producing now, not just started** (rows in the last 60 minutes):
+
+| fleet | decisions (60m) | cycles (60m) |
+| --- | --- | --- |
+| `rider` | 214 | 3 |
+| `rider_flare` | 48 | 3 |
+| `scav` | 7 | 6 |
+| `solo_rider` | 58 | 58 |
+
+All four active fleets have live cycles and decisions in the last hour —
+no silent-death signature (a STARTUP with nothing after it).
+
+**6 — The data gap, per fleet** (exact last-cycle-before /
+first-cycle-after, not just hour-bucketed — an outage this short doesn't
+show up as a zero-row hour):
+
+| fleet | last cycle before boot | first cycle after boot | gap |
+| --- | --- | --- | --- |
+| `scav` | 08:18:43.470Z | 08:23:18.475Z | ~4m35s |
+| `rider` | 08:19:06.622Z | 08:23:43.583Z | ~4m37s |
+| `solo_rider` | 08:20:47.626Z | 08:23:19.006Z | ~2m32s |
+| `rider_flare` | 08:13:57.661Z | 08:25:17.453Z | ~11m20s (longest) |
+
+Hour-bucketed `rider_cycles` over the full last 24h shows **zero fully-dark
+hours** — the real per-fleet gap is 2-11 minutes, and every one of those
+gaps falls entirely inside the 08:14Z-08:22Z update-restart window from
+Step 1. **This is not a recurrence of the 2026-08-10 seven-hour outage** —
+gap length matches the reboot window, nothing longer, and every fleet
+recovered on its own with no manual intervention.
+
+**7 — Anchor writer.**
+
+| item | value |
+| --- | --- |
+| Last `anchor_log` row | id `42`, ts `2026-08-12T16:25:17.323Z`, symbol `ETH/USD`, tx `40f8f82bae9ed297b5a842cab4d8347476cd1d65940e18c086378254e5ebe3f8` |
+| Last STARTUP before final reboot | 08:18:57.426Z |
+| Last CYCLE before final reboot | 08:19:50.308Z — wrote only 3/5 symbols (OP, FLR, ETH) |
+| STARTUP after final reboot | 08:23:45.080Z |
+| First CYCLE after reboot | 08:24:27.447Z — wrote all 5/5 symbols |
+| Next CYCLE | 16:25:17.856Z — ~8h after the 08:24:27 cycle, normal cadence |
+
+One transient failure found, already self-corrected: `SEND_FAILED` at
+08:19:41Z for `BTC/USD` (`429 Too Many Requests` from the Flare RPC),
+which is why the 08:19:50Z cycle only wrote 3 of 5 symbols (`ARB/USD` also
+missing from that cycle). The very next cycle, immediately after the
+post-reboot restart (08:24:27Z), wrote all 5 including `BTC/USD` and
+`ARB/USD`. **No cycle was permanently missed and no FLR was lost** — a
+`SEND_FAILED` means the transaction was never submitted, not that gas was
+spent. 8h cadence has resumed normally (08:24:27Z → 16:25:17Z).
+
+**Verdict.** All 8 services survived the update and are confirmed live via
+Supabase, not just registered. Power settings (standby/hibernate/disk, all
+0; hibernate disabled at the system level) are unchanged from Clay's
+configuration — the update did **not** reset the power plan, and this is
+**not** a repeat of the 2026-08-10 seven-hour outage. Actual downtime was
+2-11 minutes per fleet, matching the three-restart Windows Update chain
+exactly, and every service came back on its own. Anchor writer had one
+transient rate-limit hiccup that rolled forward and self-corrected on the
+next cycle — no missed anchor, no lost FLR. Only open item: the log
+doesn't explain why the machine was *found* powered off, since it shows
+continuous uptime since 08:22:30Z — worth Clay confirming what he actually
+observed and when.
+
+---
+
+### A/B result — final numbers and caveats
+
+Shared window: `ts >= 2026-08-07 23:20:04+00`, both fleets, the same
+16-symbol `FLARE_UNIVERSE` filter.
+
+| block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
+| --- | --- | --- |
+| Total rows | 6,124 | 6,736 |
+| `pullback_insufficient` | 5,188 (84.7%) | 6,408 (95.1%) |
+| `already_held` | 911 (14.9%) | 150 (2.2%) |
+| `floor_fetch_failed` | 9 | 175 (2.6%) |
+| `price_fetch_failed` | 12 | — |
+| `obi_gate_blocked` | 2 | 1 |
+| null | 2 | 2 |
+
+**Caveats — stated plainly, not softened:**
+
+- **The 84.7% vs 95.1% difference is NOT an oracle effect.** It is driven
+  by `already_held`: the venue-priced engine has more capital deployed in
+  these sixteen assets from a longer run. Excluding `already_held`, the
+  two engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
+- **`floor_fetch_failed` (175) is CoinGecko rate-limiting on a separate
+  90-day historical-data call, NOT an FTSO failure.** FTSO returned zero
+  read failures across the window; the centralized venue returned twelve
+  `price_fetch_failed`.
+- **The oracle-priced engine logged MORE rows than the venue-priced
+  engine despite a smaller universe.** The venue engine's team-full and
+  cash-floor gates use `BREAK`, so once the team fills, later symbols in
+  the list go unevaluated that cycle. This is a structural property of
+  the parent engine, unrelated to data source.
+
+**Roadmap:** the historical-data adapter is provider-agnostic by design;
+B3 Data API integration is the next planned source, alongside FDC
+attestation of the venue price.
+
+Same content added to [`flare/README.md`](../flare/README.md) under "A/B
+result: FTSO vs centralized venue". No code changed — documentation only.
+
+---
+
 ## 2026-08-11
 
 ### Fixed

@@ -121,3 +121,38 @@ Task Scheduler services (`PRV1311-DivergenceRecorder`,
 shape as the existing `PRV1311-RiderTeam` / `PRV1311-FootprintWorker`
 services. Install scripts: `install_divergence_recorder_task.ps1`,
 `install_rider_flare_task.ps1` (repo root of `Prv1311/`).
+
+## A/B result: FTSO vs centralized venue
+
+Shared window: `ts >= 2026-08-07 23:20:04+00`, both fleets, the same
+16-symbol `FLARE_UNIVERSE` filter.
+
+| block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
+|---|---|---|
+| Total rows | 6,124 | 6,736 |
+| `pullback_insufficient` | 5,188 (84.7%) | 6,408 (95.1%) |
+| `already_held` | 911 (14.9%) | 150 (2.2%) |
+| `floor_fetch_failed` | 9 | 175 (2.6%) |
+| `price_fetch_failed` | 12 | — |
+| `obi_gate_blocked` | 2 | 1 |
+| null | 2 | 2 |
+
+**Caveats — read before drawing any conclusion from the table above:**
+
+- **The 84.7% vs 95.1% difference is NOT an oracle effect.** It is driven
+  by `already_held`: the venue-priced engine has more capital deployed in
+  these sixteen assets from a longer run. Excluding `already_held`, the
+  two engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
+- **`floor_fetch_failed` (175) is CoinGecko rate-limiting on a separate
+  90-day historical-data call, NOT an FTSO failure.** FTSO returned zero
+  read failures across the window; the centralized venue returned twelve
+  `price_fetch_failed`.
+- **The oracle-priced engine logged MORE rows than the venue-priced
+  engine despite a smaller universe.** The venue engine's team-full and
+  cash-floor gates use `BREAK`, so once the team fills, later symbols in
+  the list go unevaluated that cycle. This is a structural property of
+  the parent engine, unrelated to data source.
+
+**Roadmap:** the historical-data adapter is provider-agnostic by design;
+B3 Data API integration is the next planned source, alongside FDC
+attestation of the venue price.
