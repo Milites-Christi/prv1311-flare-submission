@@ -520,6 +520,19 @@ No code behavior changed by this pass — comments and docstrings only.
 
 ---
 
+### Repository layout documented
+
+Added a "Repository layout" section to the repo root `README.md`. The repo
+root holds the **original PRV1311 system** — the parent build this project
+grew out of. `Prv1311/` is the codebase for **this hackathon submission**,
+including `Prv1311/flare/`. Where a filename exists at both paths, the two
+versions have diverged; `Prv1311/` is the live code. Separating the
+original system out into its own repository is **planned for after the
+Aug 14 submission deadline**, not done now. No code changed — documentation
+only.
+
+---
+
 ## 2026-08-11
 
 ### Fixed
