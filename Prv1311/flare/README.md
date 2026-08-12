@@ -1,8 +1,7 @@
 # Flare hackathon build — Prv1311/flare/
 
-This directory holds the Flare-specific work: FTSOv2 integration, the
-on-chain divergence measurement, and the FTSO-priced paper-trading engine.
-Nothing outside it was modified except two small, additive,
+Deadline: Aug 14. This directory is the entire scope of new work for the
+event. Nothing outside it was modified except two small, additive,
 default-preserving parameters added to `rider_team.py` (see "Ported /
 integrated" below) — every other file in this repo is untouched.
 
@@ -16,13 +15,13 @@ Coinbase-priced original, so the divergence isn't just measured — it's
 tested against an actual trading outcome.
 
 This is a market reader, not a trading bot pitch. The interesting artifact
-here is the comparison data, not any one trade.
+of this week is the comparison data, not any one trade.
 
 ## Pre-hackathon state
 
-Before this build, three independent, drifted copies of FTSOv2-reading
-logic existed in the repo (root `flare_ftso.py`, targeting the dead
-Coston2 testnet; `Flare_Trial.py\Flare_ftso.py`, mainnet but stale/cached;
+Before this week, three independent, drifted copies of FTSOv2-reading logic
+existed in the repo (root `flare_ftso.py`, targeting the dead Coston2
+testnet; `Flare_Trial.py\Flare_ftso.py`, mainnet but stale/cached;
 and an inline copy inside the file then named `solo_rider_flare.py`). None
 of them handled the one behavior that actually matters on live mainnet:
 `getFeedsById` reverts the *entire batch* if even one requested feed ID
@@ -41,7 +40,7 @@ to `flare_ftso_legacy.py` to remove a case-insensitive filename collision
 with the sibling that imported it, which was fatal on Linux, harmless on
 Windows.
 
-## What was built
+## Built this week
 
 - **`ftso.py`** — the one canonical FTSOv2 reader. Fixed known-good universe
   (`establish_coverage()`) + bisection (`_call_batch`) as the single
@@ -80,23 +79,22 @@ candles feeding the regime gate and the anomaly (blow-off-pump) gate, the
 90-day floor, the rolling 7-day high, order-book imbalance, and order-flow
 all still read Coinbase. Flare has no OHLCV history endpoint, no order
 book, and no trade tape — there's nothing to build a fully-Flare-priced
-version of those signals from with the data sources available today.
-`rider_flare.py`'s own docstring states this plainly; it is not hidden
-behind the name.
+version of those signals from in a week. `rider_flare.py`'s own docstring
+states this plainly; it is not hidden behind the name.
 
 ## Ported / integrated
 
 `rider_flare.py` does not duplicate `rider_team.py`'s gate-walking loop —
 duplication is exactly how the three original FTSO readers drifted apart
 before this rebuild. Instead, `rider_team.run_cycle()` / `run_engine()`
-gained six default-preserving parameters (zero behavior change for the
+gained five default-preserving parameters (zero behavior change for the
 live `PRV1311-RiderTeam` service, which calls every one of them at its
 default):
 
 | Parameter | Default | Purpose |
 |---|---|---|
 | `price_fn` | `screener.fetch_live_price` | swap in `price_adapter.get_live_price` for FTSO pricing |
-| `fleet` | `'rider'` | explicit tag on every decision/cycle row — **mandatory**, not left to the DB column default; a silently-missing fleet tag would land `rider_flare`'s rows as `'rider'` with no error and contaminate the whole A/B comparison |
+| `fleet` | `'rider'` | explicit tag on every decision/cycle row — **mandatory**, not left to the DB column default; a silently-missing fleet tag would land `rider_flare`'s rows as `'rider'` with no error and contaminate the whole week's A/B comparison |
 | `ledger_file` | `RIDER_LEDGER_FILE` | separate `data/rider_flare_ledger.json` |
 | `state_table` | `'rider_state'` | separate `rider_flare_state` Supabase table |
 | `universe_fn` | `None` → live market scan | fixed 16-symbol FTSO universe instead of the broad Coinbase scan |
@@ -124,84 +122,10 @@ shape as the existing `PRV1311-RiderTeam` / `PRV1311-FootprintWorker`
 services. Install scripts: `install_divergence_recorder_task.ps1`,
 `install_rider_flare_task.ps1` (repo root of `Prv1311/`).
 
-## Tick-size mechanism
-
-Divergence magnitude between FTSO and the venue is not random noise — it's
-substantially explained by the venue's quote tick size relative to price.
-Coinbase can only express discrete price levels on a given tick; the
-oracle drifts continuously underneath that, so apparent divergence tracks
-how coarse the venue's tick is at that asset's price point. Full
-methodology, per-step evidence, and the two exceptions found along the way
-are in `docs/CHANGELOG.md` under "Tick-size law verification" — this
-section states the result, plainly, without overclaiming it:
-
-- **Tick size relative to price predicts the *ranking* of divergence
-  magnitude**: Pearson r = 0.9887, Spearman ρ = 0.965 (n=114 per symbol).
-- **It is NOT a universal ceiling.** The half-tick bound binds as an
-  absolute limit for OP only; for the other 15 symbols the bound is a
-  fraction of a basis point, and read-timing plus real price movement
-  dominate at that scale.
-- **Convergent evidence:** an independent proxy for the same property,
-  1/(distinct venue price levels), correlates with the same ranking at
-  r = 0.99.
-- **FLR fits** (half-tick bound 8.3 bps vs. observed 9.45 bps). FLR
-  ranking high means the single venue prices it worst, which is what the
-  mechanism predicts for the thinnest source.
-
-**Real `quote_increment`** per symbol, pulled live from Coinbase's public
-product endpoint (`https://api.exchange.coinbase.com/products/{PRODUCT_ID}`,
-no auth), not assumed:
-
-| Symbol | quote_increment |
-| --- | --- |
-| OP-USD | 0.001 |
-| FLR-USD | 0.00001 |
-| ARB-USD | 0.0001 |
-| BTC-USD | 0.01 |
-| ETH-USD | 0.01 |
-| SOL-USD | 0.01 |
-| XRP-USD | 0.0001 |
-| LINK-USD | 0.001 |
-| AVAX-USD | 0.001 |
-| ADA-USD | 0.00001 |
-| HBAR-USD | 0.00001 |
-| XLM-USD | 0.000001 |
-| NEAR-USD | 0.0001 |
-| AAVE-USD | 0.01 |
-| UNI-USD | 0.0001 |
-| ONDO-USD | 0.00001 |
-
 ## A/B result: FTSO vs centralized venue
 
-Shared window: `ts >= 2026-08-07 23:20:04+00`, both fleets, the same
-16-symbol `FLARE_UNIVERSE` filter.
-
-| block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
-|---|---|---|
-| Total rows | 6,124 | 6,736 |
-| `pullback_insufficient` | 5,188 (84.7%) | 6,408 (95.1%) |
-| `already_held` | 911 (14.9%) | 150 (2.2%) |
-| `floor_fetch_failed` | 9 | 175 (2.6%) |
-| `price_fetch_failed` | 12 | — |
-| `obi_gate_blocked` | 2 | 1 |
-| null | 2 | 2 |
-
-**Caveats — read before drawing any conclusion from the table above:**
-
-- **The 84.7% vs 95.1% difference is NOT an oracle effect.** It is driven
-  by `already_held`: the venue-priced engine has more capital deployed in
-  these sixteen assets from a longer run. Excluding `already_held`, the
-  two engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
-- **`floor_fetch_failed` (175) is CoinGecko rate-limiting on a separate
-  90-day historical-data call, NOT an FTSO failure.** FTSO returned zero
-  read failures across the window; the centralized venue returned twelve
-  `price_fetch_failed`.
-- **The oracle-priced engine logged MORE rows than the venue-priced
-  engine despite a smaller universe.** The venue engine's team-full and
-  cash-floor gates use `BREAK`, so once the team fills, later symbols in
-  the list go unevaluated that cycle. This is a structural property of
-  the parent engine, unrelated to data source.
-
-**Roadmap:** the historical-data adapter is provider-agnostic by design;
-B3 Data API integration is the next planned source, alongside FDC
-attestation of the venue price.
+See the root [`README.md`](../../README.md) — "What the divergence numbers
+actually mean" — for the full A/B result table, its three caveats, and the
+tick-size mechanism analysis behind it. Kept in one place rather than
+duplicated across both files; that's the pitch document, this is the
+technical detail.

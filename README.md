@@ -140,12 +140,74 @@ FTSO-priced engine had current information. That's not the oracle disagreeing
 with the market — that's the venue having nothing to say, and the oracle
 being the only source that noticed.
 
-<!-- A/B RESULT TABLE + THREE CAVEATS GO HERE (commit 027a336).
-     Verify they survived the last edit before committing. -->
+### A/B result: FTSO vs centralized venue
 
-<!-- TICK-SIZE MECHANISM SECTION GOES HERE.
-     Claim it as a RANKING predictor (r = 0.9887, rho = 0.965), NOT a
-     universal ceiling — the half-tick bound binds for OP only. -->
+Shared window: `ts >= 2026-08-07 23:20:04+00`, both fleets, the same
+16-symbol `FLARE_UNIVERSE` filter.
+
+| block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
+|---|---|---|
+| Total rows | 6,124 | 6,736 |
+| `pullback_insufficient` | 5,188 (84.7%) | 6,408 (95.1%) |
+| `already_held` | 911 (14.9%) | 150 (2.2%) |
+| `floor_fetch_failed` | 9 | 175 (2.6%) |
+| `price_fetch_failed` | 12 | — |
+| `obi_gate_blocked` | 2 | 1 |
+| null | 2 | 2 |
+
+**Three caveats, stated plainly rather than softened:**
+
+- **The 84.7% vs 95.1% gap is not an oracle effect.** It's driven by
+  `already_held` — the venue-priced engine has more capital deployed in
+  these sixteen assets from a longer run. Excluding `already_held`, the two
+  engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
+- **`floor_fetch_failed` (175) is CoinGecko rate-limiting** on a separate
+  90-day historical-data call, not an FTSO failure. FTSO returned zero read
+  failures across the window; the centralized venue returned twelve
+  `price_fetch_failed`.
+- **The oracle-priced engine logged more rows despite a smaller universe.**
+  The venue engine's team-full and cash-floor gates use `BREAK`, so once
+  the team fills, later symbols in the list go unevaluated that cycle — a
+  structural property of the parent engine, unrelated to data source.
+
+### Tick-size mechanism
+
+The ranking above isn't arbitrary. Tick size relative to price — how coarse
+a venue's quote grid is at that asset's price point — predicts the
+*ranking* of divergence magnitude: Pearson r = 0.9887, Spearman ρ = 0.965
+(n=114 per symbol). It is **not a universal ceiling**: the half-tick bound
+binds as an absolute limit for OP only. For the other 15 symbols the bound
+is a fraction of a basis point, and read-timing plus real price movement
+between snapshots dominate at that scale.
+
+Convergent evidence: an independent proxy for the same property —
+1/(distinct venue price levels observed) — correlates with the same
+ranking at r = 0.99. FLR fits the pattern rather than breaking it: half-tick
+bound 8.3 bps against an observed 9.45 bps. FLR ranking high doesn't mean
+the oracle is unreliable for it — it means the single venue prices it
+worst, exactly what the mechanism predicts for the thinnest source.
+
+Real `quote_increment` per symbol, pulled live from Coinbase's public
+product endpoint, not assumed:
+
+| Symbol | quote_increment |
+| --- | --- |
+| OP-USD | 0.001 |
+| FLR-USD | 0.00001 |
+| ARB-USD | 0.0001 |
+| BTC-USD | 0.01 |
+| ETH-USD | 0.01 |
+| SOL-USD | 0.01 |
+| XRP-USD | 0.0001 |
+| LINK-USD | 0.001 |
+| AVAX-USD | 0.001 |
+| ADA-USD | 0.00001 |
+| HBAR-USD | 0.00001 |
+| XLM-USD | 0.000001 |
+| NEAR-USD | 0.0001 |
+| AAVE-USD | 0.01 |
+| UNI-USD | 0.0001 |
+| ONDO-USD | 0.00001 |
 
 ---
 
