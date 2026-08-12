@@ -52,7 +52,15 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 }
 
 $Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m flare.rider_flare" -WorkingDirectory $RepoDir
+# -RandomDelay: this script's import chain pulls in flare.price_adapter, which makes a
+# LIVE Flare-mainnet RPC call at Python import time. Measured at ~20s even on a
+# healthy, long-booted network (2026-08-11) -- a plausible failure point in the first
+# moments after a fresh boot, before DNS/network/this machine's AV TLS-interception
+# layer are ready (same class of issue that produced anchor_writer's exit-78 incident
+# 2026-08-11; see docs/CHANGELOG.md 2026-08-12). This delay avoids racing that window;
+# it doesn't fix the underlying import-time network dependency.
 $Trigger = New-ScheduledTaskTrigger -AtStartup
+$Trigger.Delay = "PT2M"
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $Settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `

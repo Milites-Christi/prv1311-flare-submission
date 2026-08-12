@@ -102,6 +102,9 @@ MAX_CALLS_PER_RUN = 5       # one per symbol in ANCHOR_SYMBOLS, hard stop
 MAX_FLR_PER_DAY = 1.8       # 3 cycles/day x 5 calls x ~0.0926 FLR ~= 1.39;
                              # 1.8 gives headroom for gas spikes without
                              # effectively disabling the cap
+                             # (was temporarily raised to 3.0 for the 2026-08-11
+                             # 5/5 manual verification cycle; reverted immediately
+                             # after -- see docs/CHANGELOG.md)
 MIN_WALLET_BALANCE = 2.0    # hard floor -- refuse to start a cycle, or send,
                              # below this (was 5.0; deliberately spending
                              # this wallet down toward empty before judging)
@@ -206,7 +209,21 @@ def _run_cycle():
             symbols_skipped.append({"symbol": symbol, "reason": str(e)})
             continue
 
-        spent_today = _flr_spent_today() + flr_spent_this_run
+        # NOT "+ flr_spent_this_run" -- REAL BUG, FOUND LIVE (2026-08-11,
+        # 22:46:33 UTC): _flr_spent_today() re-queries anchor_log fresh on
+        # every call, which already reflects every row THIS run has written
+        # so far (each _log_anchor_row() insert below completes, and is
+        # visible to the next SELECT, before the loop reaches the next
+        # symbol). Adding flr_spent_this_run on top counted every write made
+        # so far in this run a second time. Confirmed against the actual
+        # incident: refused at spent_today=1.83650155 when the real total was
+        # 1.5614508 (fresh DB total, itself already including this run's
+        # writes) + 0.27505075 (flr_spent_this_run, the same writes again) --
+        # ~0.24 FLR of real headroom was refused as if it didn't exist. The
+        # fresh DB read alone is already authoritative -- same reasoning as
+        # the cycle-level check above (line ~172), which never had this bug
+        # because it runs once, before any writes exist yet this run.
+        spent_today = _flr_spent_today()
         if spent_today >= MAX_FLR_PER_DAY:
             record_health("anchor_writer", "REFUSED_DAILY_CAP", {
                 "symbol": symbol, "spent_today": spent_today,

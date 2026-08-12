@@ -69,7 +69,18 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 }
 
 $Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m flare.anchor_writer" -WorkingDirectory $RepoDir
+# -RandomDelay: this script's import chain (flare.deploy_anchor -> flare.price_adapter)
+# makes a LIVE Flare-mainnet RPC call at Python import time, before the logger even
+# exists (see the pre-logger guard at the top of anchor_writer.py). Measured at ~20s
+# even on a healthy, long-booted network (2026-08-11) -- in the first moments after a
+# fresh boot, before DNS/network/this machine's AV TLS-interception layer are ready,
+# that same call is a plausible cause of the exit-78 failure observed 2026-08-11 at
+# boot (see docs/CHANGELOG.md 2026-08-12; root cause traced, not proven -- the actual
+# historical exception was unrecoverable, event logging was off). This delay doesn't
+# fix the underlying import-time network dependency, it just avoids racing it during
+# the one window most likely to lose that race.
 $Trigger = New-ScheduledTaskTrigger -AtStartup
+$Trigger.Delay = "PT2M"
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $Settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
