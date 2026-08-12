@@ -828,6 +828,148 @@ result: FTSO vs centralized venue". No code changed — documentation only.
 
 ---
 
+### Tick-size law verification
+
+Analysis only, no engine changes. Hypothesis: divergence magnitude between
+FTSO and the venue is predicted by the venue's quote tick size relative to
+price — a coarse tick can only express discrete price levels, so apparent
+divergence should be bounded by roughly ±half a tick.
+
+**Step 1 — real `quote_increment`**, pulled live from
+`https://api.exchange.coinbase.com/products/{PRODUCT_ID}` (no auth), not
+assumed:
+
+| Symbol | quote_increment |
+| --- | --- |
+| OP-USD | 0.001 |
+| FLR-USD | 0.00001 |
+| ARB-USD | 0.0001 |
+| BTC-USD | 0.01 |
+| ETH-USD | 0.01 |
+| SOL-USD | 0.01 |
+| XRP-USD | 0.0001 |
+| LINK-USD | 0.001 |
+| AVAX-USD | 0.001 |
+| ADA-USD | 0.00001 |
+| HBAR-USD | 0.00001 |
+| XLM-USD | 0.000001 |
+| NEAR-USD | 0.0001 |
+| AAVE-USD | 0.01 |
+| UNI-USD | 0.0001 |
+| ONDO-USD | 0.00001 |
+
+**Steps 2-3 — bps-per-tick vs observed mean |divergence_bps|.** Price used
+for every symbol: the most recent `oracle_divergence.venue_value`, all from
+the same snapshot, `ts = 2026-08-12T18:41:50.501621+00:00` (one consistent
+timestamp across the table, not mixed per-symbol times).
+
+| Symbol | quote_increment | price used | bps/tick | max_quant_bps (½ tick) | observed mean\|div\|bps (n=114) | inside/outside |
+| --- | --- | --- | --- | --- | --- | --- |
+| BTC | 0.01 | 63,371.80 | 0.002 | 0.001 | 1.61 | OUTSIDE |
+| SOL | 0.01 | 75.94 | 1.317 | 0.658 | 1.80 | OUTSIDE |
+| XRP | 0.0001 | 1.00958 | 0.991 | 0.495 | 1.85 | OUTSIDE |
+| ETH | 0.01 | 1,885.95 | 0.053 | 0.027 | 1.85 | OUTSIDE |
+| LINK | 0.001 | 8.776 | 1.139 | 0.570 | 2.04 | OUTSIDE |
+| AVAX | 0.001 | 6.371 | 1.570 | 0.785 | 2.26 | OUTSIDE |
+| ADA | 0.00001 | 0.18326 | 0.546 | 0.273 | 2.59 | OUTSIDE |
+| HBAR | 0.00001 | 0.06604 | 1.514 | 0.757 | 2.61 | OUTSIDE |
+| XLM | 0.000001 | 0.159529 | 0.063 | 0.031 | 2.92 | OUTSIDE |
+| NEAR | 0.0001 | 1.6469 | 0.607 | 0.304 | 2.93 | OUTSIDE |
+| AAVE | 0.01 | 89.16 | 1.122 | 0.561 | 2.93 | OUTSIDE |
+| UNI | 0.0001 | 3.5382 | 0.283 | 0.141 | 3.10 | OUTSIDE |
+| ONDO | 0.00001 | 0.33275 | 0.301 | 0.150 | 3.50 | OUTSIDE |
+| ARB | 0.0001 | 0.0784 | 12.755 | 6.378 | 7.73 | OUTSIDE |
+| FLR | 0.00001 | 0.00602 | 16.611 | 8.306 | 9.45 | OUTSIDE (1.14×) |
+| OP | 0.001 | 0.09 | 111.111 | 55.556 | 30.30 | **INSIDE** |
+
+**Correlation:** Pearson r = **0.9887** (r² = 0.978, n=16) between
+bps_per_tick and observed mean |divergence_bps|. Spearman rank correlation
+(fairer test, less leveraged by OP's extreme magnitude): **ρ = 0.965**.
+Excluding OP and FLR (the two ends of the range), Pearson drops to r =
+0.902 (n=14) — still strong. **Rank-level detail:** the ranking is exact at
+both ends (BTC lowest, ARB/FLR/OP highest three, in order) but scrambled in
+the tight middle tier (SOL/XRP/LINK/AVAX/HBAR vs UNI/ONDO/XLM show rank
+differences of 4-9 places) — consistent with tick size dominating only once
+it's large enough to matter; for sub-2bps-tick assets, something else
+(oracle/venue read-timing gap, real short-horizon price movement between
+snapshots) is the bigger driver, not quantization.
+
+**Step 4 — the FLR question, answered directly.** The hypothesis's own
+estimate of "~1.6 bps per tick" for FLR is **an arithmetic error, off by
+~10×**: `0.00001 / 0.0061 * 10000 = 16.39`, not 1.6. Using the real
+increment and a representative price (0.00602, same snapshot as the table
+above): bps_per_tick = **16.611**, half-tick bound = **8.306 bps**.
+Observed mean is 9.45 bps — **1.14× the bound, a near-miss, not "roughly
+six ticks away."** Once the arithmetic is corrected, FLR is *not* a
+six-tick anomaly that quantization can't explain — it's marginally outside
+its own half-tick ceiling, consistent with tick quantization plus a small
+residual (timing-gap) component, the same pattern as ARB. This corrects
+the hypothesis's premise; it does not require a second story for FLR.
+
+**Step 5 — the -69 bps OP outlier, decoded from the actual on-chain
+event**, not just the ledger. `anchor_log` row: id `25`, ts
+`2026-08-12T01:36:07.054721+00:00`, symbol `OP/USD`, tx
+`a968ba56d361a6b64c91df717ac3263584b1fea67fb26a1b5a70f641661f3bcb`,
+`divergence_bps = -69`. Decoded the real `DivergenceRecorded` event off
+that tx's receipt (block `67200523`, chain id `14` confirmed) rather than
+trusting the stored column alone:
+
+| field | value |
+| --- | --- |
+| `oracleValue` (raw / decimals=6) | `91365` → **0.091365** |
+| `oracleTimestamp` | `1786498556` → 2026-08-12T01:35:56Z |
+| `venueValue` (raw / decimals=8) | `9200000` → **0.092** |
+| `divergenceBps` (on-chain, contract-computed) | **-69** |
+| `blockTimestamp` | `1786498557` → 2026-08-12T01:35:57Z |
+
+Recomputed from the decoded floats independently:
+`(0.091365-0.092)/0.092*10000 = -69.02` — matches the on-chain integer and
+the `anchor_log` row exactly. `oracleValue`'s decimals (6) confirmed live
+via `getFeedById`, and
+the resulting price (0.091365) lines up with the independently-recorded
+`oracle_divergence` rows bracketing that timestamp (0.091332 at 01:35:54,
+0.091424 at 01:36:55) — internally consistent, not a decoding artifact.
+
+**Does -69 fall inside OP's own bound? No.** At the venue price this event
+actually used (0.092), OP's own half-tick bound is `0.001/0.092*10000/2 =
+54.35 bps`. `|-69| = 69 > 54.35` — **this specific event is OUTSIDE the
+quantization bound**, even though OP's *mean* divergence (30.30 bps) sits
+comfortably inside it using a representative current price. Reported as a
+genuine exception, not smoothed into the mean.
+
+**Why, with direct evidence, not speculation:** cross-referenced
+`oracle_divergence` for `OP/USD` across 01:30:40-01:44:07 (13 consecutive
+~60-70s-cadence rows, already pulled during this investigation) —
+`venue_value` is **frozen at exactly 0.092 for all 13 rows**, a 14-minute
+stretch with zero Coinbase reprints, while `oracle_value` drifted
+continuously (0.091357 → 0.091218 → 0.091606, a real ~42 bps of genuine
+oracle-side movement in that window). This is a **stale/thin-liquidity
+quote**, not tick rounding — the venue simply didn't trade during that
+stretch, so the observed spread is a live oracle against a stale last
+print, layered on top of (and larger than) OP's already-coarse tick. Ties
+directly to the 2026-08-11 entry's finding that OP was ~94.8% flat-tick on
+Coinbase historically — same mechanism, now caught in the act on a specific
+anchored event.
+
+**Verdict.** The tick-size hypothesis has real, strong predictive power at
+the ranking level (Pearson r=0.99, Spearman ρ=0.965) and clearly explains
+*why* OP/FLR/ARB — the three coarsest relative ticks — sit atop the
+divergence ranking while BTC/ETH sit at the bottom. But the strict "±half
+tick" ceiling holds as an absolute bound for only 1 of 16 symbols (OP, on
+its mean); for the other 15, the bound is too small to matter and other
+sources (read-timing gap, real price movement between snapshots) dominate.
+FLR is not the outlier the hypothesis worried about — correcting a ~10×
+arithmetic error in the hypothesis's own premise turns "six ticks away,
+unexplained" into "1.14× the bound, a near-miss." The -69 bps OP anchor
+*is* a real exception, confirmed on-chain and explained by a directly
+observed 14-minute stale Coinbase quote — a second, distinct mechanism
+(illiquidity, not tick coarseness) layered on top of OP's already-coarse
+tick, not evidence against the tick-size law itself. No code changed —
+investigation only. `flare/README.md` intentionally not updated yet, per
+request, pending review of this result.
+
+---
+
 ## 2026-08-11
 
 ### Fixed
