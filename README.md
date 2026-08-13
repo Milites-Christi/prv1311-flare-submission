@@ -11,7 +11,7 @@ data and the record of how it was reached.
 
 ---
 
-Why this exists
+## Why this exists
 
 Retail traders are unknowingly competing against institutional hardware. 
 The chart available to a retail participant is the visible residue of activity 
@@ -34,7 +34,7 @@ performs in favorable conditions, but what it does when conditions become ordina
 That remains to be measured. I would rather hold a system demonstrated in the difficult
 portion of a cycle than one calibrated during a calm one.
 
-Who it's for
+## Who it's for
 
 Institutional capital operates on a discipline retail participants are never handed: 
 a complete signal stack, read mechanically, with emotional interpretation removed 
@@ -45,6 +45,7 @@ PRV1311 is that architecture sized for participants without seven figures to dep
 Tiered position sizing, small compounding flips, and no requirement that the user time 
 entries or monitor positions. 
 Stability in this market should not be a function of account size.
+
 ---
 
 ## How I got here
@@ -77,7 +78,7 @@ that previously resulted in capital loss.
 
 ---
 
-Why Flare
+## Why Flare
 
 Three reasons, ordered by how directly each bears on whether the system is viable at all.
 
@@ -120,7 +121,7 @@ of the trust model — which is why FTSO is not treated here as a dependency ass
 It is the hypothesis under test, measured against a centralized venue across thousands of 
 live decisions, with the results anchored on-chain where any party can verify them.
 
-What the divergence numbers indicate
+## What the divergence numbers indicate
 
 The ranking below is easily read backwards, so the interpretation warrants stating first.
 
@@ -137,18 +138,19 @@ gates against a fourteen-minute-old value. The FTSO-priced engine held current i
 This is not the oracle disagreeing with the market; it is the venue having nothing to report,
 and the oracle being the only source that registered the change.
 
-A/B result: FTSO vs centralized venue
+### A/B result: FTSO vs centralized venue
 
 Shared window: ts >= 2026-08-07 23:20:04+00, both fleets, identical 16-symbol FLARE_UNIVERSE filter.
 
-block_reason	rider (Coinbase-priced)	rider_flare (FTSO-priced)
-Total rows	6,124	6,736
-pullback_insufficient	5,188 (84.7%)	6,408 (95.1%)
-already_held	911 (14.9%)	150 (2.2%)
-floor_fetch_failed	9	175 (2.6%)
-price_fetch_failed	12	—
-obi_gate_blocked	2	1
-null	2	2
+| block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
+|---|---|---|
+| Total rows | 6,124 | 6,736 |
+| `pullback_insufficient` | 5,188 (84.7%) | 6,408 (95.1%) |
+| `already_held` | 911 (14.9%) | 150 (2.2%) |
+| `floor_fetch_failed` | 9 | 175 (2.6%) |
+| `price_fetch_failed` | 12 | — |
+| `obi_gate_blocked` | 2 | 1 |
+| null | 2 | 2 |
 
 Three caveats, stated directly rather than softened:
 
@@ -164,7 +166,7 @@ The venue engine's team-full and cash-floor gates use BREAK, so once the team fi
 in the list go unevaluated for that cycle — a structural property of the parent engine, unrelated 
 to the data source.
 
-Tick-size mechanism:
+### Tick-size mechanism
 
 The ranking is not arbitrary. Tick size relative to price; the coarseness of a venue's quote grid 
 at a given asset's price point predicts the ranking of divergence magnitude across the sixteen symbols: 
@@ -185,9 +187,28 @@ single venue prices it worst, which is what the mechanism predicts for the thinn
 
 Actual quote_increment per symbol, retrieved live from Coinbase's public product endpoint rather than assumed:
 
+| Symbol | quote_increment |
+| --- | --- |
+| OP-USD | 0.001 |
+| FLR-USD | 0.00001 |
+| ARB-USD | 0.0001 |
+| BTC-USD | 0.01 |
+| ETH-USD | 0.01 |
+| SOL-USD | 0.01 |
+| XRP-USD | 0.0001 |
+| LINK-USD | 0.001 |
+| AVAX-USD | 0.001 |
+| ADA-USD | 0.00001 |
+| HBAR-USD | 0.00001 |
+| XLM-USD | 0.000001 |
+| NEAR-USD | 0.0001 |
+| AAVE-USD | 0.01 |
+| UNI-USD | 0.0001 |
+| ONDO-USD | 0.00001 |
+
 ---
 
-Asset roles
+## Asset roles
 
 BTC is not a tradable asset in PRV1311. It functions as a directional reference;
 a component of how market state is read, not a member of the traded universe.
@@ -196,7 +217,7 @@ The sole circumstance in which a user holds BTC is by electing to park realized
 profit there rather than in a stablecoin. It appears in the divergence measurements
 because it is a required input to the reading, not because the system acquires it.
 
-What was here before
+## What was here before
 
 Worth stating directly, since evidence of new work is easier to evaluate against
 a visible starting point.
@@ -224,7 +245,7 @@ fatal on Linux and silent on Windows, and the inline copy removed when solo_ride
 became solo_rider.py. The "now()" string is now datetime.now(timezone.utc).isoformat().
 A single canonical reader replaced all three.
 
-Built for this event
+## Built for this event
 
 All new work resides in Prv1311/flare/. Nothing outside that directory was modified except 
 six additive, default-preserving parameters on rider_team.py, detailed below.
@@ -264,7 +285,7 @@ read-only measurement of on-chain DEX prices against off-chain sources, writing 
 dedicated table. Not wired into any trading path.
 coingecko_adapter.py — provider-agnostic historical-data adapter serving the 90-day floor and rolling high.
 
-The contract
+### The contract
 
 DivergenceAnchor is live on Flare mainnet at 0x086b912dD8aD5639c5adFD57bF8724B485786eDC. 
 The Coston2 deployment shares that address through deterministic addressing, so the chain 
@@ -279,7 +300,7 @@ Alongside each reading, it stores a decisionHash — the keccak256 of that cycle
 committed before the outcome existed. Reveal the row afterward and any party recomputes the hash. 
 That property is the substance of the work.
 
-Scope of what is Flare-priced
+### Scope of what is Flare-priced
 
 Only the value used for entry and exit decisions originates from FTSO. Daily candles feeding
 the regime and anomaly gates, the 90-day floor, the rolling 7-day high, order-book imbalance,
@@ -288,23 +309,36 @@ no order book, and no trade tape, so fully Flare-priced equivalents of those sig
 presently be constructed. The rider_flare.py docstring states this directly; it is not 
 concealed behind the module name.
 
-Ported/integrated
+## Ported/integrated
 
 rider_flare.py does not duplicate the rider_team.py gate loop;
 duplication is precisely how the three original FTSO readers drifted apart. 
 Instead, run_cycle() and run_engine() gained six default-preserving parameters. 
 The live PRV1311-RiderTeam service calls each at its default, leaving its behavior unchanged.
 
-(table unchanged)
+| Parameter | Default | Purpose |
+|---|---|---|
+| `price_fn` | `screener.fetch_live_price` | swap in `price_adapter.get_live_price` for FTSO pricing |
+| `fleet` | `'rider'` | explicit tag on every decision/cycle row — **mandatory**, not left to a DB column default; a silently-missing tag would land `rider_flare` rows as `'rider'` with no error and contaminate the entire comparison |
+| `ledger_file` | `RIDER_LEDGER_FILE` | separate `data/rider_flare_ledger.json` |
+| `state_table` | `'rider_state'` | separate `rider_flare_state` table |
+| `universe_fn` | `None` → live market scan | fixed 16-symbol FTSO universe instead of the broad venue scan |
+| `log_name` | `'rider_team'` | separate `logs/rider_flare.log` — two services sharing one rotating log risks a `PermissionError` on Windows during rollover |
 
 Everything else — screener, anomaly_gate, footprint_gate, supabase_client, rider_decision_log, 
 orderbook_imbalance, regime — is imported unmodified from the hardened shared modules.
 
-Running
+## Running
 
 From Prv1311/. Working directory matters; these are package-relative imports.
 
-(code block unchanged)
+```
+python -m flare.divergence                    # one-shot spread report, 16 symbols
+python -m flare.divergence_recorder           # continuous recorder -> oracle_divergence
+python -m flare.rider_flare                   # FTSO-priced Rider twin
+python -m flare.onchain_divergence_recorder   # on-chain vs off-chain measurement
+python -m flare.anchor_writer                 # anchors readings to Flare mainnet
+```
 
 All are registered as Windows Task Scheduler services (AtStartup, SYSTEM, RestartCount 999), 
 with install scripts in Prv1311/. anchor_writer spends real FLR on every anchor it writes to mainnet;
