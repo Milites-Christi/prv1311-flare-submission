@@ -24,7 +24,7 @@ The present environment is an unusually severe test of that premise.
 Conditions are as adverse as any I have traded through; the conventional sentiment
 gauges have been unreliable for months, and the system has continued operating 
 throughout. Roughly two weeks of continuous operation, paper-traded, with fees 
-modeled on both legs, currently at $1,200+ in ledger profit. 
+modeled on both legs, currently at **$1,200+ in ledger profit**. 
 Not through prediction — the engine does not read headlines. It reads market state 
 mechanically, on an identical cycle every time, and records the reasoning behind 
 every position it declined to take.
@@ -82,25 +82,25 @@ that previously resulted in capital loss.
 
 Three reasons, ordered by how directly each bears on whether the system is viable at all.
 
-1. Coarse price resolution renders the logic blind.
+**1. Coarse price resolution renders the logic blind.**
 
 
 Every entry gate in PRV1311 is percentage-based off price. 
 Price resolution is therefore not an implementation detail;
 it determines whether a gate can form a judgment at all.
 
-It could not. Thirteen assets were blocked on pullback_insufficient in 97–100% of cycles. 
-OP registered one distinct Coinbase price across 114 samples over two hours and nineteen 
-minutes while the oracle moved continuously beneath it. The gate was not rejecting weak 
+It could not. Thirteen assets were blocked on `pullback_insufficient` in 97–100% of cycles. 
+OP registered **one distinct Coinbase price across 114 samples over two hours and nineteen 
+minutes** while the oracle moved continuously beneath it. The gate was not rejecting weak 
 setups. It was blind — asked to measure a 10% pullback against a quote structurally 
 incapable of expressing one, and returning a tautology every cycle.
 
 FTSO's approximately 100-provider composite resolves prices a single venue cannot. 
 This does not make it a substitute for a centralized feed. 
-It makes the engine operable on assets where a single venue cannot support the logic at all.
+**It makes the engine operable on assets where a single venue cannot support the logic at all.**
 
 
-2. Fee structure determines whether the strategy is viable.
+**2. Fee structure determines whether the strategy is viable.**
 
 This is a high-frequency, low-percentage design.
 Scavenger targets sit at 3%, riders at 5%, the entry tier lower still. At those margins 
@@ -112,7 +112,7 @@ small correct decisions rather than a few large ones, that distinction separates
 strategy that compounds from one that donates. Execution on Flare is not yet built;
 it appears on the roadmap below, but the fee structure is why it is the natural venue for this design.
 
-3. The data is the entire trust surface.
+**3. The data is the entire trust surface.**
 
 Remove the human from the reading and no participant remains to observe that a price is wrong. 
 A mechanical system inherits the flaws of its data completely and without objection. 
@@ -125,14 +125,14 @@ live decisions, with the results anchored on-chain where any party can verify th
 
 The ranking below is easily read backwards, so the interpretation warrants stating first.
 
-Divergence measures the venue's staleness, not the oracle's error. A composite of 
+**Divergence measures the venue's staleness, not the oracle's error.** A composite of 
 approximately one hundred providers carries better information about a thin asset than
 any single exchange does. Where FLR shows wide divergence, the finding is that one 
 US exchange prices FLR worst; precisely what would be predicted for the thinnest 
 available source, and precisely what the mechanism described below accounts for.
 
 The clearest instance: at one anchor, the Coinbase OP quote remained fixed at exactly 
-$0.092 for fourteen minutes across thirteen consecutive samples while FTSO tracked 
+$0.092 for **fourteen minutes across thirteen consecutive samples** while FTSO tracked 
 continuous movement beneath it. An engine pricing off that venue was computing percentage
 gates against a fourteen-minute-old value. The FTSO-priced engine held current information. 
 This is not the oracle disagreeing with the market; it is the venue having nothing to report,
@@ -140,7 +140,7 @@ and the oracle being the only source that registered the change.
 
 ### A/B result: FTSO vs centralized venue
 
-Shared window: ts >= 2026-08-07 23:20:04+00, both fleets, identical 16-symbol FLARE_UNIVERSE filter.
+Shared window: `ts >= 2026-08-07 23:20:04+00`, both fleets, identical 16-symbol `FLARE_UNIVERSE` filter.
 
 | block_reason | rider (Coinbase-priced) | rider_flare (FTSO-priced) |
 |---|---|---|
@@ -152,28 +152,26 @@ Shared window: ts >= 2026-08-07 23:20:04+00, both fleets, identical 16-symbol FL
 | `obi_gate_blocked` | 2 | 1 |
 | null | 2 | 2 |
 
-Three caveats, stated directly rather than softened:
+**Three caveats, stated directly rather than softened:**
 
-The 84.7% versus 95.1% gap is not an oracle effect. It is driven by already_held:
-The venue-priced engine holds more capital deployed across these sixteen assets from a longer run. 
-Excluding already_held, the two engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
-floor_fetch_failed (175) reflects CoinGecko rate-limiting on a separate 90-day historical-data call,
-not an FTSO failure. FTSO returned zero read failures across the window; the centralized venue 
-returned twelve price_fetch_failed.
-The oracle-priced engine logged more rows despite a smaller universe. 
-
-The venue engine's team-full and cash-floor gates use BREAK, so once the team fills, later symbols 
-in the list go unevaluated for that cycle — a structural property of the parent engine, unrelated 
-to the data source.
+- **The 84.7% versus 95.1% gap is not an oracle effect.** It is driven by `already_held`:
+  The venue-priced engine holds more capital deployed across these sixteen assets from a longer run. 
+  Excluding `already_held`, the two engines agree on 99.5% (venue) and 97.3% (oracle) of evaluations.
+- **`floor_fetch_failed` (175) reflects CoinGecko rate-limiting** on a separate 90-day historical-data call,
+  not an FTSO failure. FTSO returned zero read failures across the window; the centralized venue 
+  returned twelve `price_fetch_failed`.
+- **The oracle-priced engine logged more rows despite a smaller universe.** The venue engine's team-full and cash-floor gates use `BREAK`, so once the team fills, later symbols 
+  in the list go unevaluated for that cycle — a structural property of the parent engine, unrelated 
+  to the data source.
 
 ### Tick-size mechanism
 
 The ranking is not arbitrary. Tick size relative to price; the coarseness of a venue's quote grid 
-at a given asset's price point predicts the ranking of divergence magnitude across the sixteen symbols: 
+at a given asset's price point predicts the *ranking* of divergence magnitude across the sixteen symbols: 
 Pearson r = 0.9887, Spearman ρ = 0.965. Each symbol's mean divergence derives from 114 samples; 
 the correlation itself is computed across the sixteen symbol-level means.
 
-This is not a universal ceiling. The half-tick bound binds as an absolute limit for OP alone.
+This is **not a universal ceiling**. The half-tick bound binds as an absolute limit for OP alone.
 For the remaining fifteen symbols, the bound is a fraction of a basis point, and read-timing
 together with genuine price movement between snapshots dominates at that scale.
 
@@ -185,7 +183,7 @@ observed 9.45 bps.
 FLR ranking high does not indicate the oracle is unreliable for that asset; it indicates the 
 single venue prices it worst, which is what the mechanism predicts for the thinnest source.
 
-Actual quote_increment per symbol, retrieved live from Coinbase's public product endpoint rather than assumed:
+Actual `quote_increment` per symbol, retrieved live from Coinbase's public product endpoint rather than assumed:
 
 | Symbol | quote_increment |
 | --- | --- |
@@ -210,7 +208,7 @@ Actual quote_increment per symbol, retrieved live from Coinbase's public product
 
 ## Asset roles
 
-BTC is not a tradable asset in PRV1311. It functions as a directional reference;
+**BTC is not a tradable asset in PRV1311.** It functions as a directional reference;
 a component of how market state is read, not a member of the traded universe.
 
 The sole circumstance in which a user holds BTC is by electing to park realized 
@@ -223,80 +221,72 @@ Worth stating directly, since evidence of new work is easier to evaluate against
 a visible starting point.
 
 Three independent and mutually drifted copies of FTSOv2-reading logic existed in this 
-repository: root flare_ftso.py, targeting the discontinued Coston2 testnet; Flare_Trial.py\Flare_ftso.py, 
-on mainnet but stale; and an inline copy within what was then solo_rider_flare.py.
+repository: root `flare_ftso.py`, targeting the discontinued Coston2 testnet; `Flare_Trial.py\Flare_ftso.py`, 
+on mainnet but stale; and an inline copy within what was then `solo_rider_flare.py`.
 
-None handled the one behavior that governs live mainnet use: getFeedsById reverts the 
-entire batch if any single requested feed ID does not exist. It does not return zero 
+None handled the one behavior that governs live mainnet use: **`getFeedsById` reverts the 
+entire batch if any single requested feed ID does not exist.** It does not return zero 
 for the invalid entry; it fails the whole call. All three copies would have frozen every
 tracked symbol's price the first time an invalid symbol entered a batch. 
 
 This behavior does not appear in Flare's documentation, so far as I could determine. 
 It surfaced by running the call against mainnet and observing the failure.
 
-The same file transmitted updated_at: "now()" as a literal Python string on every ledger
-upsert, which a timestamptz column rejects on insert.
+The same file transmitted `updated_at: "now()"` as a literal Python string on every ledger
+upsert, which a `timestamptz` column rejects on insert.
 
-All of this is resolved. 
+**All of this is resolved.**
 
-The three copies are gone: one deleted alongside Flare_Trial.py\, one renamed to
-flare_ftso_legacy.py to eliminate a case-insensitive filename collision that was 
-fatal on Linux and silent on Windows, and the inline copy removed when solo_rider_flare.py 
-became solo_rider.py. The "now()" string is now datetime.now(timezone.utc).isoformat().
+The three copies are gone: one deleted alongside `Flare_Trial.py\`, one renamed to
+`flare_ftso_legacy.py` to eliminate a case-insensitive filename collision that was 
+fatal on Linux and silent on Windows, and the inline copy removed when `solo_rider_flare.py` 
+became `solo_rider.py`. The `"now()"` string is now `datetime.now(timezone.utc).isoformat()`.
 A single canonical reader replaced all three.
 
 ## Built for this event
 
-All new work resides in Prv1311/flare/. Nothing outside that directory was modified except 
-six additive, default-preserving parameters on rider_team.py, detailed below.
+All new work resides in `Prv1311/flare/`. Nothing outside that directory was modified except 
+six additive, default-preserving parameters on `rider_team.py`, detailed below.
 
-ftso.py — the canonical FTSOv2 reader. A fixed known-good universe (establish_coverage()) 
-combined with bisection (_call_batch) handles both discovery of which symbols carry live 
-feeds and self-healing when a previously valid feed ceases to resolve mid-session.
-
-It never falls back to getFeedById to probe a single symbol; a batch of size one is 
-still getFeedsById. Confirmed 16 of 20 candidate symbols carry live mainnet feeds 
-(absent: COTI, EUL, KAITO, LDO) — broader coverage than anticipated at the outset.
-price_adapter.py — sole owner of the confirmed 16-symbol universe (FLARE_UNIVERSE) and 
-get_live_price(). Established once at import, so every module shares a single coverage
-determination rather than deriving its own.
-divergence.py — one-shot FTSO-versus-venue spread measurement. 
-
-Reads all 16 symbols from Coinbase in a single bulk fetch_tickers() call rather than
-16 separate calls: sixteenfold less venue traffic, and it narrows the oracle/venue 
-timestamp gap by aligning one venue snapshot against one oracle batch.
-divergence_recorder.py — the continuous form. Every 60 seconds, one row per symbol to 
-Supabase oracle_divergence carrying spread in basis points, both raw timestamps, and a 
-normalized timestamp_gap_ms. 
-
-This is the dataset the finding rests on, not a debug log. 
-
-Two venue calls per minute in total. rider_flare.py 
-The FTSO-priced Rider twin. Identical gate logic to rider_team.py, imported rather than 
-copied, fixed to the 16-symbol universe and priced off FTSO for entry and exit. 
-Separate ledger, separate state table, decision rows explicitly tagged fleet='rider_flare'.
-decision_hash.py — canonical serialization of a decision row, ensuring the same row hashes
-identically regardless of when or where it is re-fetched. Explicit field order pinned from
-the live schema, fixed 10-decimal float formatting, nulls preserved as null.
-contracts/DivergenceAnchor.sol, deploy_anchor.py, and anchor_writer.py — the on-chain
-component, described below.
-onchain_swaps.py, onchain_divergence.py, onchain_divergence_recorder.py —
-read-only measurement of on-chain DEX prices against off-chain sources, writing to a 
-dedicated table. Not wired into any trading path.
-coingecko_adapter.py — provider-agnostic historical-data adapter serving the 90-day floor and rolling high.
+- **`ftso.py`** — the canonical FTSOv2 reader. A fixed known-good universe (`establish_coverage()`) 
+  combined with bisection (`_call_batch`) handles both discovery of which symbols carry live 
+  feeds and self-healing when a previously valid feed ceases to resolve mid-session. It never falls back to `getFeedById` to probe a single symbol; a batch of size one is 
+  still `getFeedsById`. Confirmed 16 of 20 candidate symbols carry live mainnet feeds 
+  (absent: `COTI`, `EUL`, `KAITO`, `LDO`) — broader coverage than anticipated at the outset.
+- **`price_adapter.py`** — sole owner of the confirmed 16-symbol universe (`FLARE_UNIVERSE`) and 
+  `get_live_price()`. Established once at import, so every module shares a single coverage
+  determination rather than deriving its own.
+- **`divergence.py`** — one-shot FTSO-versus-venue spread measurement. Reads all 16 symbols from Coinbase in a single bulk `fetch_tickers()` call rather than
+  16 separate calls: sixteenfold less venue traffic, and it narrows the oracle/venue 
+  timestamp gap by aligning one venue snapshot against one oracle batch.
+- **`divergence_recorder.py`** — the continuous form. Every 60 seconds, one row per symbol to 
+  Supabase `oracle_divergence` carrying spread in basis points, both raw timestamps, and a 
+  normalized `timestamp_gap_ms`. This is the dataset the finding rests on, not a debug log. Two venue calls per minute in total.
+- **`rider_flare.py`** — the FTSO-priced Rider twin. Identical gate logic to `rider_team.py`, imported rather than 
+  copied, fixed to the 16-symbol universe and priced off FTSO for entry and exit. 
+  Separate ledger, separate state table, decision rows explicitly tagged `fleet='rider_flare'`.
+- **`decision_hash.py`** — canonical serialization of a decision row, ensuring the same row hashes
+  identically regardless of when or where it is re-fetched. Explicit field order pinned from
+  the live schema, fixed 10-decimal float formatting, nulls preserved as null.
+- **`contracts/DivergenceAnchor.sol`**, **`deploy_anchor.py`**, and **`anchor_writer.py`** — the on-chain
+  component, described below.
+- **`onchain_swaps.py`**, **`onchain_divergence.py`**, **`onchain_divergence_recorder.py`** —
+  read-only measurement of on-chain DEX prices against off-chain sources, writing to a 
+  dedicated table. Not wired into any trading path.
+- **`coingecko_adapter.py`** — provider-agnostic historical-data adapter serving the 90-day floor and rolling high.
 
 ### The contract
 
-DivergenceAnchor is live on Flare mainnet at 0x086b912dD8aD5639c5adFD57bF8724B485786eDC. 
+`DivergenceAnchor` is live on **Flare mainnet** at `0x086b912dD8aD5639c5adFD57bF8724B485786eDC`. 
 The Coston2 deployment shares that address through deterministic addressing, so the chain 
 should be confirmed before reading its history.
 
-The governing principle: the contract reads FTSOv2 itself, on-chain. The oracle value is never
+The governing principle: **the contract reads FTSOv2 itself, on-chain.** The oracle value is never
 a function argument. Were the price read in Python and written in, the result would be a database
 storing my own assertion about what the oracle reported. Instead the contract fetches the feed,
 normalizes both sides to 18 decimals, computes divergence in basis points on-chain, and emits it.
 
-Alongside each reading, it stores a decisionHash — the keccak256 of that cycle's decision row,
+Alongside each reading, it stores a `decisionHash` — the keccak256 of that cycle's decision row,
 committed before the outcome existed. Reveal the row afterward and any party recomputes the hash. 
 That property is the substance of the work.
 
@@ -306,15 +296,15 @@ Only the value used for entry and exit decisions originates from FTSO. Daily can
 the regime and anomaly gates, the 90-day floor, the rolling 7-day high, order-book imbalance,
 and order flow continue to read a centralized venue. Flare exposes no OHLCV history endpoint,
 no order book, and no trade tape, so fully Flare-priced equivalents of those signals cannot 
-presently be constructed. The rider_flare.py docstring states this directly; it is not 
+presently be constructed. The `rider_flare.py` docstring states this directly; it is not 
 concealed behind the module name.
 
 ## Ported/integrated
 
-rider_flare.py does not duplicate the rider_team.py gate loop;
+`rider_flare.py` does not duplicate the `rider_team.py` gate loop;
 duplication is precisely how the three original FTSO readers drifted apart. 
-Instead, run_cycle() and run_engine() gained six default-preserving parameters. 
-The live PRV1311-RiderTeam service calls each at its default, leaving its behavior unchanged.
+Instead, `run_cycle()` and `run_engine()` gained six default-preserving parameters. 
+The live `PRV1311-RiderTeam` service calls each at its default, leaving its behavior unchanged.
 
 | Parameter | Default | Purpose |
 |---|---|---|
@@ -325,12 +315,12 @@ The live PRV1311-RiderTeam service calls each at its default, leaving its behavi
 | `universe_fn` | `None` → live market scan | fixed 16-symbol FTSO universe instead of the broad venue scan |
 | `log_name` | `'rider_team'` | separate `logs/rider_flare.log` — two services sharing one rotating log risks a `PermissionError` on Windows during rollover |
 
-Everything else — screener, anomaly_gate, footprint_gate, supabase_client, rider_decision_log, 
-orderbook_imbalance, regime — is imported unmodified from the hardened shared modules.
+Everything else — `screener`, `anomaly_gate`, `footprint_gate`, `supabase_client`, `rider_decision_log`, 
+`orderbook_imbalance`, `regime` — is imported unmodified from the hardened shared modules.
 
 ## Running
 
-From Prv1311/. Working directory matters; these are package-relative imports.
+From `Prv1311/`. Working directory matters; these are package-relative imports.
 
 ```
 python -m flare.divergence                    # one-shot spread report, 16 symbols
@@ -340,8 +330,8 @@ python -m flare.onchain_divergence_recorder   # on-chain vs off-chain measuremen
 python -m flare.anchor_writer                 # anchors readings to Flare mainnet
 ```
 
-All are registered as Windows Task Scheduler services (AtStartup, SYSTEM, RestartCount 999), 
-with install scripts in Prv1311/. anchor_writer spends real FLR on every anchor it writes to mainnet;
+All are registered as Windows Task Scheduler services (AtStartup, SYSTEM, `RestartCount 999`), 
+with install scripts in `Prv1311/`. `anchor_writer` spends real FLR on every anchor it writes to mainnet;
 it is gated behind a typed confirmation and mechanical per-run and per-day ceilings, and refuses any chain other than 14.
 
 ## Roadmap
