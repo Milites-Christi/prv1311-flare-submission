@@ -33,6 +33,29 @@ since early in the build window, independent of any commit history.
 
 ---
 
+## 2026-08-13
+
+### Supabase table comments
+
+All 21 Supabase tables labeled with `COMMENT ON TABLE` descriptions.
+Documentation-only pass, no schema or data changes. Findings surfaced while
+going table-by-table:
+
+- **`anchor_log`** is the on-chain anchoring record (`tx_hash`, `gas_used`,
+  `flr_paid`, `decision_hash`).
+- **`regime_state`** and **`obi_state`** are live tables feeding the regime
+  and OBI gates — previously unlabeled.
+- **`rider_flare_state`** is the Flare twin's ledger; its treasury is a
+  field within that table, not a separate table.
+- **`solo_riders_archive`** and **`treasury_archive`** are legacy,
+  pre-refactor Solo Rider snapshots, superseded by `solo_rider_state` and
+  `solo_rider_config`.
+- **`solo_riders_flare`** and **`treasury_flare`** do not exist and were
+  never created — this is the expected state following the removal of
+  `solo_rider_flare.py`, not a discrepancy.
+
+---
+
 ## 2026-08-12
 
 ### Summary
