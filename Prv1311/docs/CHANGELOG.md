@@ -54,6 +54,32 @@ going table-by-table:
   never created — this is the expected state following the removal of
   `solo_rider_flare.py`, not a discrepancy.
 
+### Contract verification
+
+Prepared Blockscout source verification for `DivergenceAnchor` on Flare
+mainnet (`0x086b912dD8aD5639c5adFD57bF8724B485786eDC`). No redeploy, no
+source change — verification only.
+
+- Read the exact compiler settings back out of `flare/deploy_anchor.py`
+  (`_compile()`): solc `0.8.24`, `evm_version='cancun'`, optimizer
+  untouched (solcx default is disabled — no `optimize=True` passed).
+  Constructor takes no arguments (`Contract.constructor()`, no args), so
+  there are no ABI-encoded constructor args to submit.
+- Recompiled the unmodified source locally with those exact settings and
+  confirmed the creation bytecode matches the committed
+  `flare/contracts/DivergenceAnchor.bin` byte-for-byte, and that a
+  from-scratch Solidity Standard JSON compile reproduces the live
+  `eth_getCode` runtime bytecode on Flare mainnet byte-for-byte
+  **including the trailing metadata hash** — the strongest evidence this
+  is the exact source/settings pair that was deployed, not just a
+  functional match.
+- Wrote `flare/contracts/verify_standard_input.json`, a Solidity Standard
+  JSON Input (solc `0.8.24`, `evmVersion: cancun`, optimizer disabled,
+  runs `200`, source keyed as `flare/contracts/DivergenceAnchor.sol` —
+  the same relative path solc embedded in the deployed metadata since
+  `deploy_anchor.py` is run from `Prv1311/`) for submission via
+  Blockscout's "Solidity (Standard JSON Input)" verification method.
+
 ---
 
 ## 2026-08-12
